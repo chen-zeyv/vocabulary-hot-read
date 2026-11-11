@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="theme-color" content="#f4f7fb" />
+    <meta name="description" content="把当天词汇放进近期热点文章和练习中。" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="./icons/icon-apple-touch-180.png" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>词汇热读 · 英语学习</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./lesson-coverage.js" defer></script>
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="词汇热读首页">
+        <img class="brand-mark" src="./icons/icon-192.png" alt="" width="30" height="30" />
+        <span>词汇热读</span>
+      </a>
+      <div class="topbar-status"><span id="network-status" class="privacy-chip" role="status" aria-live="polite"><span class="status-dot" aria-hidden="true"></span><span id="network-label"><span id="network-label-short">在线</span><span id="network-label-long" class="network-label-long"> · 仅本页会话保存</span></span></span><button id="install-button" class="button secondary install-button" type="button" hidden>安装应用</button></div>
+    </header>
+    <div id="offline-banner" class="offline-banner" role="status" hidden>当前离线：可以打开应用界面，热点搜索和文章生成仍需网络连接。</div>
+    <main id="top" class="layout">
+      <section class="intro" data-mobile-stage="0">
+        <p class="eyebrow">英语阅读练习</p>
+        <h1>让今天的词，<br />读进真实世界。</h1>
+        <p class="intro-copy">粘贴正在学习的词汇，挑一条近期热点，生成一篇有出处的英语短文和练习。</p>
+      </section>
+      <nav class="stage-nav" aria-label="学习阶段">
+        <button type="button" data-stage-button="0" aria-pressed="true"><span>01</span>准备</button>
+        <button type="button" data-stage-button="1" aria-pressed="false"><span>02</span>选热点</button>
+        <button type="button" data-stage-button="2" aria-pressed="false"><span>03</span>阅读与练习</button>
+      </nav>
+      <p class="send-scope" role="note">发送范围：热点搜索只发送类别、地区和时间范围给 DeepSeek Search；生成时把词汇、所选热点资料和写作要求发送给 DeepSeek Chat。费用由你的账户承担，密钥只在本页会话内存中使用。</p>
+      <section class="notice" data-mobile-stage="0" aria-label="隐私与费用说明">
+        <strong>发送前请知悉</strong>
+        <p>本次试用仅使用 DeepSeek Search/Fetch 搜索和 DeepSeek Chat Completions 生成。搜索默认按类别进行，只发送类别、地区和时间范围，不发送词汇；生成时会把词汇、所选热点资料和写作要求发送给 DeepSeek。费用由你自己的 DeepSeek 账户承担。密钥只保存在当前页面内存中，但页面脚本和开发者工具可以访问它；刷新页面会清除本页数据。</p>
+        <label class="consent-row"><input id="consent" type="checkbox" /><span>我已了解数据发送对象和费用由本人承担。</span></label>
+      </section>
+      <form id="lesson-form" novalidate>
+        <section class="panel" data-mobile-stage="0" aria-labelledby="words-heading">
+          <div class="panel-heading"><div><span class="step-index">01</span><h2 id="words-heading">今天要复习的词</h2></div><span class="helper">一行一个，最多 30 个</span></div>
+          <label class="field-label" for="words">学习 / 复习词汇</label>
+          <textarea id="words" name="words" rows="4" maxlength="1200" placeholder="curious&#10;harvest&#10;resilient" autocomplete="off"></textarea>
+          <div class="field-row"><span id="word-count" class="helper">0 个词</span><span class="helper">重复词会自动合并</span></div>
+        </section>
+        <section class="panel" data-mobile-stage="1" aria-labelledby="search-heading">
+          <div class="panel-heading"><div><span class="step-index">02</span><h2 id="search-heading">找一条近期热点</h2></div><span class="helper">全球英语来源 · 最近 7 天</span></div>
+          <fieldset class="choice-group">
+            <legend class="field-label">搜索方式</legend>
+            <label class="radio-card"><input type="radio" name="search-mode" value="category" checked /><span><b>按类别浏览</b><small>只发送类别和时间范围</small></span></label>
+            <label class="radio-card disabled-choice"><input type="radio" name="search-mode" value="vocabulary" disabled /><span><b>按今日词汇推荐 · 本次试用停用</b><small>避免将词汇发送给搜索服务商</small></span></label>
+          </fieldset>
+          <div class="field-grid search-options">
+            <div><label class="field-label" for="category">热点类别</label><select id="category"><option value="technology">科技</option><option value="science">科学</option><option value="world">世界</option><option value="sports">体育</option><option value="culture">文化</option></select></div>
+            <div><label class="field-label" for="region">热点地区</label><select id="region"><option value="global">全球</option><option value="north-america">北美</option><option value="europe">欧洲</option><option value="asia">亚洲</option></select></div>
+          </div>
+          <div class="provider-config search-config">
+            <div class="config-title"><div><strong>独立搜索服务</strong><span class="tag success-tag">本机 Edge 实测成功</span></div><p>DeepSeek Search/Fetch。试用仅发送类别、地区和最近 7 天范围，不会把词汇放进搜索请求。</p></div>
+            <label class="field-label" for="search-key">DeepSeek API Key</label>
+            <input id="search-key" type="password" inputmode="text" autocomplete="off" spellcheck="false" placeholder="在本机页面输入个人密钥" />
+          </div>
+          <div class="button-row"><button id="search-button" class="button secondary" type="button">搜索近期热点</button><span id="search-state" class="inline-state" role="status" aria-live="polite"></span></div>
+          <div id="candidate-list" class="candidate-list" aria-live="polite"></div>
+        </section>
+        <section class="panel" data-mobile-stage="1" aria-labelledby="generation-heading">
+          <div class="panel-heading"><div><span class="step-index">03</span><h2 id="generation-heading">生成阅读与练习</h2></div><span class="helper">候选确认后只发送一次生成请求</span></div>
+          <div class="provider-config">
+            <div class="config-title"><div><strong>文章生成模型</strong><span class="tag success-tag">DeepSeek Chat Completions · 本机 Edge 实测成功</span></div><p>其余服务商保留在配置列表中，但本次试用会禁用，须完成独立验证后再开放。</p></div>
+            <div class="field-grid">
+              <div><label class="field-label" for="provider">服务商 / 协议</label><select id="provider"><option value="deepseek">DeepSeek · Chat Completions</option><option value="qwen" disabled>阿里云百炼 · 未验证，暂不用于本次试用</option><option value="doubao" disabled>火山引擎 / 豆包 · 未验证，暂不用于本次试用</option><option value="hunyuan" disabled>腾讯混元 / TokenHub · 未验证，暂不用于本次试用</option><option value="baidu" disabled>百度千帆 · 未验证，暂不用于本次试用</option><option value="glm" disabled>智谱 GLM · 未验证，暂不用于本次试用</option><option value="moonshot" disabled>Moonshot / Kimi · 未验证，暂不用于本次试用</option><option value="minimax" disabled>MiniMax · 未验证，暂不用于本次试用</option><option value="custom" disabled>自定义接口 · 未验证，暂不用于本次试用</option></select></div>
+              <div><label class="field-label" for="model">模型 ID</label><input id="model" type="text" autocomplete="off" placeholder="例如 deepseek-flash" /></div>
+            </div>
+            <label class="field-label" for="endpoint">HTTPS API 地址</label>
+            <input id="endpoint" type="url" autocomplete="off" spellcheck="false" placeholder="https://api.example.com/v1/chat/completions" />
+            <p class="field-hint">本次试用固定使用 DeepSeek 官方 HTTPS 接口。不得在地址中加入密钥或查询参数。</p>
+            <label class="field-label" for="model-key">个人模型 API Key</label>
+            <input id="model-key" type="password" autocomplete="off" spellcheck="false" placeholder="在本机页面输入个人密钥" />
+          </div>
+          <div class="field-grid preferences">
+            <div><label class="field-label" for="level">英语难度</label><select id="level"><option>A2</option><option selected>B1</option><option>B2</option></select></div>
+            <div><label class="field-label" for="length">文章长度</label><select id="length"><option value="short">短篇 · 约 150 词</option><option value="medium" selected>中篇 · 约 250 词</option></select></div>
+            <div><label class="field-label" for="target-count">目标词数量</label><select id="target-count"><option value="5">最多 5 个</option><option value="10" selected>最多 10 个</option><option value="all">尽可能全部</option></select></div>
+          </div>
+          <label class="toggle-row"><input id="translation" type="checkbox" /><span><b>生成中文全文翻译</b><small>默认关闭，会增加发送内容和模型费用</small></span></label>
+          <div class="button-row"><button id="generate-button" class="button primary" type="button" disabled>先搜索并选择热点</button><span id="generation-state" class="inline-state" role="status" aria-live="polite"></span></div>
+          <div id="generation-detail" class="generation-detail" hidden></div>
+        </section>
+      </form>
+      <section id="result" class="result-section" data-mobile-stage="2" hidden aria-live="polite"></section>
+      <footer class="footer"><span>不保存学习历史。关闭或刷新页面后，词汇、文章和密钥会清除。</span><button id="clear-button" class="text-button" type="button">清空本页</button></footer>
+    </main>
+    <!-- 修订确认面板：替代原生 window.confirm；默认隐藏，只有用户点击“确认发送修订”才发送请求。 -->
+    <div id="revision-dialog" class="dialog-backdrop" hidden>
+      <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="revision-dialog-title" aria-describedby="revision-dialog-desc">
+        <p class="result-kicker">修订确认</p>
+        <h2 id="revision-dialog-title">确认发送修订请求</h2>
+        <div id="revision-dialog-desc">
+          <p>确认后会再次向 DeepSeek Chat 发送以下内容：</p>
+          <ul class="dialog-list">
+            <li>本次未覆盖的漏词</li>
+            <li>当前文章全文</li>
+            <li>本次学习词汇</li>
+            <li>你所选热点资料的标题与摘要</li>
+          </ul>
+          <p>这会额外发出一次 API 请求，可能产生费用，费用由你的 DeepSeek 账户承担。修订最多一次；发出后不会自动重试，也不会再次发送。</p>
+          <p id="revision-dialog-words" class="helper"></p>
+        </div>
+        <div class="button-row">
+          <button class="button primary" id="revision-confirm" type="button">确认发送修订</button>
+          <button class="button secondary" id="revision-cancel" type="button">取消</button>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

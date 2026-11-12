@@ -1,13 +1,6 @@
 (() => {
   "use strict";
 
-  const CATEGORY_LABELS = {
-    technology: "technology and digital innovation",
-    science: "science and research",
-    world: "world events",
-    sports: "sports",
-    culture: "culture and arts",
-  };
   const REGION_TERMS = {
     global: "",
     "north-america": "North America",
@@ -158,9 +151,9 @@
     updateControls();
   }
 
-  // 类别或地区变化后，旧候选与旧文章都不再对应当前条件，必须一起清除。
+  // 热点标签或地区变化后，旧候选与旧文章都不再对应当前条件，必须一起清除。
   function handleCriteriaChange(kind) {
-    const label = kind === "region" ? "地区" : "类别";
+    const label = kind === "region" ? "地区" : "标签";
     const hadCandidates = state.candidates.length > 0;
     const hadArticle = Boolean(state.generated);
     const currentStage = Number(document.body.dataset.mobileStage || 0);
@@ -191,7 +184,8 @@
   function updateControls() {
     const consented = $("#consent").checked;
     const hasWords = getWords().length > 0 && getWords().length <= 30;
-    searchButton.disabled = !navigator.onLine || !consented || !hasWords;
+    const hasTag = Boolean(getTag());
+    searchButton.disabled = !navigator.onLine || !consented || !hasWords || !hasTag;
     const canGenerate = consented && state.selectedCandidate >= 0 && !state.generationAttempted;
     generateButton.disabled = !navigator.onLine || !canGenerate;
     generateButton.textContent = state.selectedCandidate < 0
@@ -206,15 +200,61 @@
     return date.toISOString().slice(0, 10);
   }
 
-  function getSearchMode() {
-    return "category";
+  const TAG_MAX_LENGTH = 48;
+  const QUERY_MAX_LENGTH = 128;
+  const CJK_PATTERN = /[\u3400-\u9fff]/;
+
+  function normalizeTag(value) {
+    return String(value || "")
+      .replace(/[\r\n]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function getTag() {
+    return normalizeTag($("#topic-tag").value).slice(0, TAG_MAX_LENGTH);
+  }
+
+  function updateTagFeedback(truncated = false) {
+    const tag = normalizeTag($("#topic-tag").value);
+    const hint = $("#tag-hint");
+    const state = $("#tag-state");
+    if (truncated || tag.length > TAG_MAX_LENGTH) {
+      hint.textContent = `标签超过 ${TAG_MAX_LENGTH} 字符，已截断为前 ${TAG_MAX_LENGTH} 个字符。`;
+    } else if (!tag) {
+      hint.textContent = "输入英文标签，例如 artificial intelligence；也可以点下面的快捷标签。";
+    } else if (CJK_PATTERN.test(tag)) {
+      hint.textContent = "当前标签含中文，英文标签的检索效果更好；仍可搜索。";
+    } else {
+      hint.textContent = "检索时会自动加上地区、最近 7 天和英文来源条件。";
+    }
+    if (!tag) {
+      state.textContent = "先填一个标签";
+      state.className = "inline-state error";
+    } else {
+      state.textContent = "";
+      state.className = "inline-state";
+    }
+  }
+
+  function handleTagInput() {
+    const input = $("#topic-tag");
+    const normalized = normalizeTag(input.value);
+    let truncated = false;
+    if (normalized.length > TAG_MAX_LENGTH) {
+      input.value = normalized.slice(0, TAG_MAX_LENGTH);
+      truncated = true;
+    }
+    updateTagFeedback(truncated);
+    if (state.candidates.length || state.generated) handleCriteriaChange("tag");
+    else updateControls();
   }
 
   function buildSearchQuery() {
-    const base = CATEGORY_LABELS[$("#category").value] || CATEGORY_LABELS.technology;
+    const tag = getTag();
     const region = REGION_TERMS[$("#region").value] || "";
-    const suffix = `${region ? ` ${region}` : ""} lang:en after:${startOfRecentWindow()}`;
-    return `${base.slice(0, Math.max(1, 128 - suffix.length))}${suffix}`;
+    const suffix = `${region ? ` ${region}` : ""} after:${startOfRecentWindow()} lang:en`;
+    return `${tag.slice(0, Math.max(1, QUERY_MAX_LENGTH - suffix.length))}${suffix}`;
   }
 
   function classifyError(error, response) {
@@ -356,10 +396,16 @@
     }
     const words = getWords();
     if (!$("#consent").checked || words.length === 0 || words.length > 30) return;
-    const key = $("#search-key").value.trim();
+    if (!getTag()) {
+      setState("#search-state", "先填一个热点标签，再搜索近期热点。", "error");
+      updateTagFeedback();
+      $("#topic-tag").focus();
+      return;
+    }
+    const key = $("#api-key").value.trim();
     if (!key) {
-      setState("#search-state", "请在本机页面输入个人 DeepSeek API Key。", "error");
-      $("#search-key").focus();
+      setState("#search-state", "请先在上方填写 DeepSeek API Key", "error");
+      $("#api-key").focus();
       return;
     }
     const query = buildSearchQuery();
@@ -384,7 +430,7 @@
       state.candidates = readSearchResults(response);
       state.searchTime = new Date().toLocaleDateString("zh-CN");
       if (!state.candidates.length) {
-        setState("#search-state", "检索成功，但没有收到可展示的有效来源链接。可手动调整词汇或类别后重新发起一次搜索。", "error");
+        setState("#search-state", "检索成功，但没有收到可展示的有效来源链接。可调整热点标签或地区后重新发起一次搜索。", "error");
         const empty = document.createElement("p");
         empty.className = "empty-message";
         empty.textContent = "没有可用候选；请确认近期结果和 HTTPS 来源链接。未生成文章。";
@@ -536,9 +582,14 @@
       return;
     }
     const model = $("#model").value.trim();
-    const key = $("#model-key").value.trim();
-    if (!model || !key) {
-      setState("#generation-state", "请填写模型 ID 和个人 API Key。", "error");
+    const key = $("#api-key").value.trim();
+    if (!key) {
+      setState("#generation-state", "请先在上方填写 DeepSeek API Key", "error");
+      $("#api-key").focus();
+      return;
+    }
+    if (!model) {
+      setState("#generation-state", "请填写模型 ID。", "error");
       return;
     }
     if (provider === "baidu") {
@@ -629,16 +680,100 @@
     }
   }
 
-  function highlightTargets(text, targetWords) {
-    const escaped = escapeHtml(text);
-    const words = (targetWords || []).map((item) => item?.word).filter((word) => typeof word === "string" && word.length > 0);
-    if (!words.length) return escaped;
-    const pattern = new RegExp(`\\b(${words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "gi");
-    return escaped.replace(pattern, '<mark class="target-word" tabindex="0">$1</mark>');
+  let speechVoices = [];
+
+  function refreshSpeechVoices() {
+    if (!("speechSynthesis" in window)) return;
+    const list = window.speechSynthesis.getVoices() || [];
+    if (list.length) speechVoices = list;
+  }
+
+  function setSpeechState(message, type = "") {
+    const element = $("#speech-state");
+    if (!element) return;
+    element.textContent = message || "";
+    element.className = `inline-state speech-state${type ? ` ${type}` : ""}`;
+  }
+
+  function speakWord(word) {
+    const text = String(word || "").trim();
+    if (!text) return;
+    if (!("speechSynthesis" in window) || typeof window.SpeechSynthesisUtterance !== "function") {
+      setSpeechState("这台设备没有可用的英文语音，可在系统设置里安装语音包", "error");
+      return;
+    }
+    refreshSpeechVoices();
+    const voices = speechVoices.length ? speechVoices : (window.speechSynthesis.getVoices() || []);
+    const us = voices.find((voice) => /^en[-_]US\b/i.test(voice.lang));
+    const gb = voices.find((voice) => /^en[-_]GB\b/i.test(voice.lang));
+    const anyEnglish = voices.find((voice) => /^en[-_]/i.test(voice.lang));
+    const selected = us || gb || anyEnglish;
+    if (!selected) {
+      if (voices.length) {
+        setSpeechState("这台设备没有可用的英文语音，可在系统设置里安装语音包", "error");
+        return;
+      }
+      // 语音列表可能尚未异步加载：先给出可操作提示，再尝试系统默认语音，避免静默失败。
+      setSpeechState("这台设备没有可用的英文语音，可在系统设置里安装语音包；正在尝试系统默认语音", "error");
+    }
+    // 读新词前先取消上一次朗读，避免叠音。
+    window.speechSynthesis.cancel();
+    const utterance = new window.SpeechSynthesisUtterance(text);
+    utterance.rate = 0.9;
+    utterance.lang = selected?.lang || "en-US";
+    if (selected) utterance.voice = selected;
+    if (selected) setSpeechState("");
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function targetSurfaces(targetWords) {
+    const seen = new Set();
+    (targetWords || []).forEach((item) => {
+      if (!item || item.used === false) return;
+      [item.word, item.matchSurface].forEach((value) => {
+        const surface = String(value || "").trim();
+        if (surface) seen.add(surface);
+      });
+    });
+    return [...seen].sort((a, b) => b.length - a.length).map(escapeRegExp);
+  }
+
+  function renderSpeechSegment(text) {
+    const pattern = /[A-Za-z]+(?:['’][A-Za-z]+)*/g;
+    let output = "";
+    let last = 0;
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      output += escapeHtml(text.slice(last, match.index));
+      output += `<span class="article-word" tabindex="-1">${escapeHtml(match[0])}</span>`;
+      last = match.index + match[0].length;
+    }
+    output += escapeHtml(text.slice(last));
+    return output;
   }
 
   function renderArticle(article, targetWords) {
-    return article.split(/\n\s*\n/).map((paragraph) => `<p>${highlightTargets(paragraph, targetWords)}</p>`).join("");
+    const surfaces = targetSurfaces(targetWords);
+    if (!surfaces.length) {
+      return article.split(/\n\s*\n/).map((paragraph) => `<p>${renderSpeechSegment(paragraph)}</p>`).join("");
+    }
+    const pattern = new RegExp(`\\b(?:${surfaces.join("|")})\\b`, "gi");
+    return article.split(/\n\s*\n/).map((paragraph) => {
+      let output = "";
+      let last = 0;
+      let match;
+      while ((match = pattern.exec(paragraph)) !== null) {
+        output += renderSpeechSegment(paragraph.slice(last, match.index));
+        output += `<span class="target-word" tabindex="0" role="button" aria-expanded="false">${escapeHtml(match[0])}</span>`;
+        last = match.index + match[0].length;
+      }
+      output += renderSpeechSegment(paragraph.slice(last));
+      return `<p>${output}</p>`;
+    }).join("");
   }
 
   function createSource(candidate) {
@@ -662,7 +797,7 @@
     box.innerHTML = `<details><summary>查看原始模型文本（仅当前页面内存，刷新即清除）</summary><pre class="raw-output">${escapeHtml(state.generationRaw)}</pre></details>`;
   }
 
-  // 修订确认面板：替代原生 window.confirm，手机端可完整展示费用说明，也不会打断浏览器自动化会话。
+  // 修订确认面板：替代浏览器原生确认框，手机端可完整展示费用说明，也不会打断浏览器自动化会话。
   const revisionDialog = $("#revision-dialog");
   const revisionConfirmButton = $("#revision-confirm");
   const revisionCancelButton = $("#revision-cancel");
@@ -792,6 +927,8 @@
         <p class="result-kicker">基于检索摘要生成 · 不是新闻原文</p>
         ${state.generationError ? `<p class="coverage-warning" role="alert">${escapeHtml(state.generationError)}</p>` : ""}
         <h2>阅读文章</h2>
+        <p class="speech-hint">点任意单词可以听发音。目标词还可以点开中文释义。</p>
+        <span id="speech-state" class="inline-state speech-state" role="status" aria-live="polite"></span>
         <p class="helper">来源：${escapeHtml(candidate.sourceName)} · 发布日期：${escapeHtml(candidate.publishedAt || "日期未知")} · 检索日期：${escapeHtml(state.searchTime)}</p>
         <div class="article-body">${renderArticle(lesson.article, targetWords)}</div>
         <ul class="source-list">${createSource(candidate)}</ul>
@@ -800,7 +937,10 @@
       ${lesson.uncoveredWords.length && !state.incompleteAccepted ? `<section class="result-panel incomplete-actions"><p class="result-kicker">文章尚未完成</p><h2>目标词没有全部出现</h2><p>练习暂不可用。你可以确认后请求一次修订，或接受当前文章并继续。</p><div class="button-row"><button class="button primary" id="revise-button" type="button" ${state.revisionUsed ? "disabled" : ""}>确认修订一次</button><button class="button secondary" id="accept-incomplete" type="button">接受当前文章</button></div><p class="helper">${state.revisionUsed ? "已使用一次修订机会；不会再次发送请求。" : "修订会额外发送一次请求，可能产生费用。只有确认后才会发送。"}</p></section>` : `<section class="result-panel"><p class="result-kicker">浏览器本地判分</p><h2>检查理解</h2><form id="quiz-form"><div class="quiz-list">${questions}</div><div class="button-row"><button class="button primary" id="submit-quiz" type="submit" ${state.submitted ? "disabled" : ""}>${state.submitted ? "已提交" : "提交答案并查看解析"}</button><span id="quiz-progress" class="inline-state" role="status"></span><span id="quiz-score" class="inline-state" role="status"></span></div></form></section>`}
       ${translation}`;
     resultElement.querySelectorAll(".target-word").forEach((mark, index) => {
-      const target = targetWords.find((item) => item.word.toLocaleLowerCase() === mark.textContent.toLocaleLowerCase());
+      // 词形不同（如目标词 resilience、文中写 resilient）时也要能对上释义面板。
+      const surfaceText = mark.textContent.trim().toLocaleLowerCase();
+      const target = targetWords.find((item) => [item.word, item.matchSurface]
+        .some((value) => String(value || "").trim().toLocaleLowerCase() === surfaceText));
       if (!target) return;
       const id = `gloss-${index}`;
       const detail = document.createElement("span");
@@ -820,11 +960,24 @@
         mark.setAttribute("aria-expanded", String(open));
         detail.hidden = !open;
       };
-      mark.addEventListener("click", toggleGloss);
+      mark.addEventListener("click", () => {
+        speakWord(mark.textContent);
+        toggleGloss();
+      });
       mark.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggleGloss(); }
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          speakWord(mark.textContent);
+          toggleGloss();
+        }
         if (event.key === "Escape") { mark.setAttribute("aria-expanded", "false"); detail.hidden = true; }
       });
+    });
+    // 全文单词可点击朗读；只有目标词进入 Tab 顺序，避免几千个词把键盘导航拖垮（有意取舍）。
+    resultElement.querySelectorAll(".article-word").forEach((wordElement) => {
+      wordElement.setAttribute("role", "button");
+      wordElement.setAttribute("aria-label", `朗读 ${wordElement.textContent}`);
+      wordElement.addEventListener("click", () => speakWord(wordElement.textContent));
     });
     if (state.submitted) showAnswers();
     $("#quiz-form")?.addEventListener("submit", submitQuiz);
@@ -905,8 +1058,8 @@
     const consent = false;
     $("#lesson-form").reset();
     $("#consent").checked = consent;
-    $("#search-key").value = "";
-    $("#model-key").value = "";
+    $("#api-key").value = "";
+    $("#topic-tag").value = "";
     // 恢复当前服务商的默认端点与模型；DeepSeek 端点只读，清空后会让用户无法再生成。
     setProviderDefaults();
     state.candidates = [];
@@ -926,6 +1079,8 @@
     renderGenerationDetail();
     setState("#search-state", "本页已清空。");
     setState("#generation-state", "");
+    updateTagFeedback();
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     updateControls();
     // 清空后回到准备阶段，避免手机端停留在已无内容的阅读阶段。
     setMobileStage(0);
@@ -939,21 +1094,25 @@
   $("#generate-button").addEventListener("click", () => generateLesson(false));
   $("#provider").addEventListener("change", setProviderDefaults);
   $("#clear-button").addEventListener("click", clearSession);
-  $("#category").addEventListener("change", () => handleCriteriaChange("category"));
+  $("#topic-tag").addEventListener("input", handleTagInput);
+  document.querySelectorAll("[data-quick-tag]").forEach((button) => {
+    button.addEventListener("click", () => {
+      $("#topic-tag").value = button.dataset.quickTag || "";
+      handleTagInput();
+      $("#topic-tag").focus();
+    });
+  });
   $("#region").addEventListener("change", () => handleCriteriaChange("region"));
-  $("#search-key").addEventListener("input", () => { /* in-memory only */ });
-  $("#model-key").addEventListener("input", () => { /* in-memory only */ });
-  document.querySelectorAll('input[name="search-mode"]').forEach((input) => input.addEventListener("change", () => {
-    const useWords = getSearchMode() === "vocabulary";
-    input.disabled = false;
-    $("#category").disabled = useWords;
-    updateControls();
-  }));
+  // 密钥只留在页面内存：这里不写任何持久化存储，输入变化只用于刷新按钮状态。
+  $("#api-key").addEventListener("input", updateControls);
+  if ("speechSynthesis" in window) {
+    refreshSpeechVoices();
+    window.speechSynthesis.addEventListener?.("voiceschanged", refreshSpeechVoices);
+  }
   $("#provider").value = "deepseek";
   setMobileStage(0);
   updateNetworkStatus();
   setProviderDefaults();
-  document.querySelector('input[name="search-mode"][value="category"]').checked = true;
-  $("#category").disabled = false;
+  updateTagFeedback();
   updateControls();
 })();

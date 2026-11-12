@@ -37,11 +37,17 @@
         <button type="button" data-stage-button="1" aria-pressed="false"><span>02</span>选热点</button>
         <button type="button" data-stage-button="2" aria-pressed="false"><span>03</span>阅读与练习</button>
       </nav>
-      <p class="send-scope" role="note">发送范围：热点搜索只发送类别、地区和时间范围给 DeepSeek Search；生成时把词汇、所选热点资料和写作要求发送给 DeepSeek Chat。费用由你的账户承担，密钥只在本页会话内存中使用。</p>
+      <p class="send-scope" role="note">发送范围：热点搜索只发送标签、地区和最近 7 天给 DeepSeek Search；生成时把词汇、所选热点资料和写作要求发送给 DeepSeek Chat。费用由你的账户承担，密钥只在本页会话内存中使用。</p>
       <section class="notice" data-mobile-stage="0" aria-label="隐私与费用说明">
         <strong>发送前请知悉</strong>
-        <p>本次试用仅使用 DeepSeek Search/Fetch 搜索和 DeepSeek Chat Completions 生成。搜索默认按类别进行，只发送类别、地区和时间范围，不发送词汇；生成时会把词汇、所选热点资料和写作要求发送给 DeepSeek。费用由你自己的 DeepSeek 账户承担。密钥只保存在当前页面内存中，但页面脚本和开发者工具可以访问它；刷新页面会清除本页数据。</p>
+        <p>本次试用仅使用 DeepSeek Search/Fetch 搜索和 DeepSeek Chat Completions 生成。搜索按你填写的热点标签进行，只发送标签、地区和最近 7 天，不发送你输入的词汇；生成时会把词汇、所选热点资料和写作要求发送给 DeepSeek。费用由你自己的 DeepSeek 账户承担。密钥只保存在当前页面内存中，但页面脚本和开发者工具可以访问它；刷新页面会清除本页数据。</p>
         <label class="consent-row"><input id="consent" type="checkbox" /><span>我已了解数据发送对象和费用由本人承担。</span></label>
+      </section>
+      <section class="panel connection-panel" aria-labelledby="connection-heading">
+        <div class="panel-heading"><div><span class="step-index">连接</span><h2 id="connection-heading">连接设置</h2></div><span class="helper">仅保存在当前页面内存</span></div>
+        <label class="field-label" for="api-key">DeepSeek API Key</label>
+        <input id="api-key" type="password" inputmode="text" autocomplete="off" spellcheck="false" placeholder="在本机页面输入个人密钥" />
+        <p class="field-hint">搜索和生成都用这一个密钥，只需填一次。刷新或清空本页后会清除。</p>
       </section>
       <form id="lesson-form" novalidate>
         <section class="panel" data-mobile-stage="0" aria-labelledby="words-heading">
@@ -52,21 +58,17 @@
         </section>
         <section class="panel" data-mobile-stage="1" aria-labelledby="search-heading">
           <div class="panel-heading"><div><span class="step-index">02</span><h2 id="search-heading">找一条近期热点</h2></div><span class="helper">全球英语来源 · 最近 7 天</span></div>
-          <fieldset class="choice-group">
-            <legend class="field-label">搜索方式</legend>
-            <label class="radio-card"><input type="radio" name="search-mode" value="category" checked /><span><b>按类别浏览</b><small>只发送类别和时间范围</small></span></label>
-            <label class="radio-card disabled-choice"><input type="radio" name="search-mode" value="vocabulary" disabled /><span><b>按今日词汇推荐 · 本次试用停用</b><small>避免将词汇发送给搜索服务商</small></span></label>
-          </fieldset>
           <div class="field-grid search-options">
-            <div><label class="field-label" for="category">热点类别</label><select id="category"><option value="technology">科技</option><option value="science">科学</option><option value="world">世界</option><option value="sports">体育</option><option value="culture">文化</option></select></div>
+            <div><label class="field-label" for="topic-tag">热点标签</label><input id="topic-tag" type="text" autocomplete="off" spellcheck="false" placeholder="artificial intelligence / climate policy" /></div>
             <div><label class="field-label" for="region">热点地区</label><select id="region"><option value="global">全球</option><option value="north-america">北美</option><option value="europe">欧洲</option><option value="asia">亚洲</option></select></div>
           </div>
+          <div class="quick-tags" aria-label="快捷热点标签"><span class="helper">快捷标签</span><button class="tag-chip" type="button" data-quick-tag="AI">AI</button><button class="tag-chip" type="button" data-quick-tag="climate science">climate science</button><button class="tag-chip" type="button" data-quick-tag="global economy">global economy</button><button class="tag-chip" type="button" data-quick-tag="Premier League">Premier League</button><button class="tag-chip" type="button" data-quick-tag="film festivals">film festivals</button></div>
+          <p id="tag-hint" class="field-hint" role="status" aria-live="polite"></p>
           <div class="provider-config search-config">
-            <div class="config-title"><div><strong>独立搜索服务</strong><span class="tag success-tag">本机 Edge 实测成功</span></div><p>DeepSeek Search/Fetch。试用仅发送类别、地区和最近 7 天范围，不会把词汇放进搜索请求。</p></div>
-            <label class="field-label" for="search-key">DeepSeek API Key</label>
-            <input id="search-key" type="password" inputmode="text" autocomplete="off" spellcheck="false" placeholder="在本机页面输入个人密钥" />
+            <div class="config-title"><div><strong>独立搜索服务</strong><span class="tag success-tag">本机 Edge 实测成功</span></div><p>DeepSeek Search/Fetch。搜索只发送标签、地区和最近 7 天范围，不会把词汇放进搜索请求。</p></div>
+            <p class="static-key-note">将使用上方填写的密钥。</p>
           </div>
-          <div class="button-row"><button id="search-button" class="button secondary" type="button">搜索近期热点</button><span id="search-state" class="inline-state" role="status" aria-live="polite"></span></div>
+          <div class="button-row"><button id="search-button" class="button secondary" type="button" disabled>搜索近期热点</button><span id="tag-state" class="inline-state error" role="status" aria-live="polite">先填一个标签</span><span id="search-state" class="inline-state" role="status" aria-live="polite"></span></div>
           <div id="candidate-list" class="candidate-list" aria-live="polite"></div>
         </section>
         <section class="panel" data-mobile-stage="1" aria-labelledby="generation-heading">
@@ -80,8 +82,7 @@
             <label class="field-label" for="endpoint">HTTPS API 地址</label>
             <input id="endpoint" type="url" autocomplete="off" spellcheck="false" placeholder="https://api.example.com/v1/chat/completions" />
             <p class="field-hint">本次试用固定使用 DeepSeek 官方 HTTPS 接口。不得在地址中加入密钥或查询参数。</p>
-            <label class="field-label" for="model-key">个人模型 API Key</label>
-            <input id="model-key" type="password" autocomplete="off" spellcheck="false" placeholder="在本机页面输入个人密钥" />
+            <p class="static-key-note">将使用上方填写的密钥。</p>
           </div>
           <div class="field-grid preferences">
             <div><label class="field-label" for="level">英语难度</label><select id="level"><option>A2</option><option selected>B1</option><option>B2</option></select></div>
@@ -96,7 +97,7 @@
       <section id="result" class="result-section" data-mobile-stage="2" hidden aria-live="polite"></section>
       <footer class="footer"><span>不保存学习历史。关闭或刷新页面后，词汇、文章和密钥会清除。</span><button id="clear-button" class="text-button" type="button">清空本页</button></footer>
     </main>
-    <!-- 修订确认面板：替代原生 window.confirm；默认隐藏，只有用户点击“确认发送修订”才发送请求。 -->
+    <!-- 修订确认面板：替代浏览器原生确认框；默认隐藏，只有用户点击“确认发送修订”才发送请求。 -->
     <div id="revision-dialog" class="dialog-backdrop" hidden>
       <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="revision-dialog-title" aria-describedby="revision-dialog-desc">
         <p class="result-kicker">修订确认</p>

@@ -166,6 +166,21 @@ input::placeholder, textarea::placeholder { color:#93a0ad; }
 .target-word:focus-visible { outline:2px solid #195c92; outline-offset:2px; }
 .gloss-popover { display:inline-block; margin:0 4px; padding:2px 8px; border-radius:5px; background:#fff2d7; color:#604814; font-family:var(--font, sans-serif); font-size:.85em; }
 .gloss-popover[hidden] { display:none; }
+.connection-panel { border-color:#bcd3e3; background:linear-gradient(180deg,#fbfdff,#f3f9fc); }
+.connection-panel .field-label { margin-top:2px; }
+.connection-panel input[type="password"] { letter-spacing:.02em; }
+.static-key-note { margin:10px 0 0; padding:8px 10px; border-radius:6px; background:#eef5fa; color:#3d556b; font-size:12px; }
+.quick-tags { display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin:9px 0 4px; }
+.quick-tags .helper { margin-right:2px; }
+.tag-chip { min-height:36px; padding:7px 12px; border:1px solid #b9d0df; border-radius:99px; background:#f5faff; color:var(--blue-dark); font-size:12px; font-weight:650; line-height:1.2; cursor:pointer; }
+.tag-chip:hover { background:var(--blue-soft); border-color:#8fb6cd; }
+.tag-chip:focus-visible { outline:3px solid #6aa6cb; outline-offset:2px; }
+.article-word { border-radius:2px; cursor:pointer; }
+.article-word:hover { background:#eef5fa; }
+.article-word:focus-visible { outline:2px solid #195c92; outline-offset:2px; }
+.speech-hint { margin:0 0 4px; color:#40566b; font-size:13px; }
+.speech-state { display:block; margin-bottom:6px; }
+.speech-state:empty { display:none; }
 .word-list li { min-height:44px; }
 .candidate, .radio-card, .quiz-option { min-height:44px; }
 .quiz-option { align-items:center; padding:8px 6px; border-radius:6px; cursor:pointer; }
@@ -220,7 +235,7 @@ img, svg { max-width:100%; }
 @media (min-resolution:1.5dppx) { .brand-mark { image-rendering:auto; } }
 
 
-/* 修订确认面板（替代原生 window.confirm）：手机端可完整显示费用说明，触控与键盘都可操作。 */
+/* 修订确认面板（替代浏览器原生确认框）：手机端可完整显示费用说明，触控与键盘都可操作。 */
 body.dialog-open { overflow: hidden; }
 .dialog-backdrop { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 18px; background: rgba(16, 36, 54, .48); }
 .dialog-backdrop[hidden] { display: none; }
@@ -231,6 +246,8 @@ body.dialog-open { overflow: hidden; }
 .dialog-list li { margin: 2px 0; }
 .dialog-card .helper { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; }
 @media (max-width: 640px) {
+  .tag-chip { min-height:40px; padding:8px 12px; }
+  .quick-tags { gap:6px; }
   .dialog-card { padding: 18px 15px 16px; border-radius: 12px; }
   .dialog-card .button-row { flex-direction: column; }
 }

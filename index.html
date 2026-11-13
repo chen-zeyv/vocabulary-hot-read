@@ -15,6 +15,7 @@
     <title>词汇热读 · 英语学习</title>
     <link rel="stylesheet" href="./styles.css" />
     <script src="./lesson-coverage.js" defer></script>
+    <script src="./learning-options.js" defer></script>
     <script src="./app.js" defer></script>
   </head>
   <body>
@@ -37,10 +38,10 @@
         <button type="button" data-stage-button="1" aria-pressed="false"><span>02</span>选热点</button>
         <button type="button" data-stage-button="2" aria-pressed="false"><span>03</span>阅读与练习</button>
       </nav>
-      <p class="send-scope" role="note">发送范围：热点搜索只发送标签、地区和最近 7 天给 DeepSeek Search；生成时把词汇、所选热点资料和写作要求发送给 DeepSeek Chat。费用由你的账户承担，密钥只在本页会话内存中使用。</p>
+      <p class="send-scope" role="note">发送范围：热点搜索只发送标签、内容范围和最近 7 天给 DeepSeek Search；点「用当前位置」时，坐标只发给浏览器定位服务与 BigDataCloud 换取城市名，页面不保存坐标；候选中文翻译发送候选标题与摘要；生成时把目标词、所选热点资料和写作要求发送给 DeepSeek Chat。费用由你的账户承担，密钥只在本页会话内存中使用。</p>
       <section class="notice" data-mobile-stage="0" aria-label="隐私与费用说明">
         <strong>发送前请知悉</strong>
-        <p>本次试用仅使用 DeepSeek Search/Fetch 搜索和 DeepSeek Chat Completions 生成。搜索按你填写的热点标签进行，只发送标签、地区和最近 7 天，不发送你输入的词汇；生成时会把词汇、所选热点资料和写作要求发送给 DeepSeek。费用由你自己的 DeepSeek 账户承担。密钥只保存在当前页面内存中，但页面脚本和开发者工具可以访问它；刷新页面会清除本页数据。</p>
+        <p>本次试用仅使用 DeepSeek Search 搜索和 DeepSeek Chat Completions 生成。搜索按你选择的 1–5 个热点标签进行，只发送标签、内容范围和最近 7 天，不发送你输入的词汇；候选中文翻译开启时，会把候选的标题与摘要发给 DeepSeek；生成时会把目标词、所选热点资料和写作要求发送给 DeepSeek。费用由你自己的 DeepSeek 账户承担。密钥只保存在当前页面内存中，但页面脚本和开发者工具可以访问它；刷新页面会清除本页数据。</p>
         <label class="consent-row"><input id="consent" type="checkbox" /><span>我已了解数据发送对象和费用由本人承担。</span></label>
       </section>
       <section class="panel connection-panel" aria-labelledby="connection-heading">
@@ -51,21 +52,31 @@
       </section>
       <form id="lesson-form" novalidate>
         <section class="panel" data-mobile-stage="0" aria-labelledby="words-heading">
-          <div class="panel-heading"><div><span class="step-index">01</span><h2 id="words-heading">今天要复习的词</h2></div><span class="helper">一行一个，最多 30 个</span></div>
+          <div class="panel-heading"><div><span class="step-index">01</span><h2 id="words-heading">今天要复习的词</h2></div><span class="helper">一行一个，不限个数，多余的留到下次</span></div>
           <label class="field-label" for="words">学习 / 复习词汇</label>
-          <textarea id="words" name="words" rows="4" maxlength="1200" placeholder="curious&#10;harvest&#10;resilient" autocomplete="off"></textarea>
-          <div class="field-row"><span id="word-count" class="helper">0 个词</span><span class="helper">重复词会自动合并</span></div>
+          <textarea id="words" name="words" rows="4" placeholder="curious&#10;harvest&#10;resilient" autocomplete="off"></textarea>
+          <div class="field-row"><span id="word-count" class="helper">0 个词</span><span class="helper">重复词会自动合并<button id="restore-words" class="text-button" type="button" hidden>恢复上次移除的词</button></span></div>
         </section>
         <section class="panel" data-mobile-stage="1" aria-labelledby="search-heading">
-          <div class="panel-heading"><div><span class="step-index">02</span><h2 id="search-heading">找一条近期热点</h2></div><span class="helper">全球英语来源 · 最近 7 天</span></div>
-          <div class="field-grid search-options">
-            <div><label class="field-label" for="topic-tag">热点标签</label><input id="topic-tag" type="text" autocomplete="off" spellcheck="false" placeholder="artificial intelligence / climate policy" /></div>
-            <div><label class="field-label" for="region">热点地区</label><select id="region"><option value="global">全球</option><option value="north-america">北美</option><option value="europe">欧洲</option><option value="asia">亚洲</option></select></div>
+          <div class="panel-heading"><div><span class="step-index">02</span><h2 id="search-heading">找一条近期热点</h2></div><span class="helper">英语来源 · 最近 7 天</span></div>
+                    <label class="field-label" for="topic-tag">热点标签（1–5 个）</label>
+          <div class="tag-input-row">
+            <input id="topic-tag" type="text" autocomplete="off" spellcheck="false" placeholder="例如 artificial intelligence" />
+            <button id="tag-add" class="button secondary tag-add" type="button">添加标签</button>
           </div>
-          <div class="quick-tags" aria-label="快捷热点标签"><span class="helper">快捷标签</span><button class="tag-chip" type="button" data-quick-tag="AI">AI</button><button class="tag-chip" type="button" data-quick-tag="climate science">climate science</button><button class="tag-chip" type="button" data-quick-tag="global economy">global economy</button><button class="tag-chip" type="button" data-quick-tag="Premier League">Premier League</button><button class="tag-chip" type="button" data-quick-tag="film festivals">film festivals</button></div>
+          <div id="tag-chips" class="tag-chips" aria-label="已选热点标签"></div>
           <p id="tag-hint" class="field-hint" role="status" aria-live="polite"></p>
+          <details id="tag-pool" class="tag-pool">
+            <summary>快捷标签（9 组，可点击添加）</summary>
+            <div id="tag-groups" class="tag-groups"></div>
+          </details>
+          <div class="field-grid search-options">
+            <div><label class="field-label" for="region">内容范围</label><div class="region-row"><select id="region"><option value="nearby" selected>身边日常</option><option value="city">本城市 / 地区</option><option value="domestic">国内</option><option value="international">国际</option></select><button id="locate-button" class="text-button locate-button" type="button">用当前位置</button></div></div>
+            <div id="region-city-field" hidden><label class="field-label" for="region-city">城市或地区名称</label><input id="region-city" type="text" autocomplete="off" spellcheck="false" placeholder="例如 Hangzhou" /><p class="field-hint">会随搜索一并发给 DeepSeek Search；留空则不能搜索。建议填英文名称，命中率更高。也可以点「用当前位置」自动填入。</p><p id="locate-state" class="field-hint" role="status" aria-live="polite"></p></div>
+          </div>
+          <label class="toggle-row"><input id="candidate-translation" type="checkbox" /><span><b>显示候选中文对照</b><small>默认关闭。打开后搜索完会一次性翻译最多 5 条候选的标题与摘要，多一次请求和费用。</small></span></label>
           <div class="provider-config search-config">
-            <div class="config-title"><div><strong>独立搜索服务</strong><span class="tag success-tag">本机 Edge 实测成功</span></div><p>DeepSeek Search/Fetch。搜索只发送标签、地区和最近 7 天范围，不会把词汇放进搜索请求。</p></div>
+            <div class="config-title"><div><strong>独立搜索服务</strong><span class="tag success-tag">本机桩数据通过</span></div><p>DeepSeek Search。搜索只发送标签、内容范围和最近 7 天范围，不会把词汇放进搜索请求。</p></div>
             <p class="static-key-note">将使用上方填写的密钥。</p>
           </div>
           <div class="button-row"><button id="search-button" class="button secondary" type="button" disabled>搜索近期热点</button><span id="tag-state" class="inline-state error" role="status" aria-live="polite">先填一个标签</span><span id="search-state" class="inline-state" role="status" aria-live="polite"></span></div>
@@ -74,7 +85,7 @@
         <section class="panel" data-mobile-stage="1" aria-labelledby="generation-heading">
           <div class="panel-heading"><div><span class="step-index">03</span><h2 id="generation-heading">生成阅读与练习</h2></div><span class="helper">候选确认后只发送一次生成请求</span></div>
           <div class="provider-config">
-            <div class="config-title"><div><strong>文章生成模型</strong><span class="tag success-tag">DeepSeek Chat Completions · 本机 Edge 实测成功</span></div><p>其余服务商保留在配置列表中，但本次试用会禁用，须完成独立验证后再开放。</p></div>
+            <div class="config-title"><div><strong>文章生成模型</strong><span class="tag success-tag">DeepSeek Chat Completions · 本机桩数据通过</span></div><p>其余服务商保留在配置列表中，但本次试用会禁用，须完成独立验证后再开放。</p></div>
             <div class="field-grid">
               <div><label class="field-label" for="provider">服务商 / 协议</label><select id="provider"><option value="deepseek">DeepSeek · Chat Completions</option><option value="qwen" disabled>阿里云百炼 · 未验证，暂不用于本次试用</option><option value="doubao" disabled>火山引擎 / 豆包 · 未验证，暂不用于本次试用</option><option value="hunyuan" disabled>腾讯混元 / TokenHub · 未验证，暂不用于本次试用</option><option value="baidu" disabled>百度千帆 · 未验证，暂不用于本次试用</option><option value="glm" disabled>智谱 GLM · 未验证，暂不用于本次试用</option><option value="moonshot" disabled>Moonshot / Kimi · 未验证，暂不用于本次试用</option><option value="minimax" disabled>MiniMax · 未验证，暂不用于本次试用</option><option value="custom" disabled>自定义接口 · 未验证，暂不用于本次试用</option></select></div>
               <div><label class="field-label" for="model">模型 ID</label><input id="model" type="text" autocomplete="off" placeholder="例如 deepseek-flash" /></div>
@@ -84,12 +95,22 @@
             <p class="field-hint">本次试用固定使用 DeepSeek 官方 HTTPS 接口。不得在地址中加入密钥或查询参数。</p>
             <p class="static-key-note">将使用上方填写的密钥。</p>
           </div>
-          <div class="field-grid preferences">
-            <div><label class="field-label" for="level">英语难度</label><select id="level"><option>A2</option><option selected>B1</option><option>B2</option></select></div>
-            <div><label class="field-label" for="length">文章长度</label><select id="length"><option value="short">短篇 · 约 150 词</option><option value="medium" selected>中篇 · 约 250 词</option></select></div>
-            <div><label class="field-label" for="target-count">目标词数量</label><select id="target-count"><option value="5">最多 5 个</option><option value="10" selected>最多 10 个</option><option value="all">尽可能全部</option></select></div>
+                    <div class="field-grid preferences">
+            <div><label class="field-label" for="level">英语难度</label><select id="level"><option value="A1">A1 · 入门</option><option value="A2">A2 · 基础</option><option value="B1" selected>B1 · 中级</option><option value="B2">B2 · 中高级</option><option value="C1">C1 · 高级</option><option value="C2">C2 · 精通</option></select></div>
+            <div><label class="field-label" for="length">文章长度</label><select id="length"><option value="100">约 100 词</option><option value="140" selected>约 140 词</option><option value="180">约 180 词</option><option value="220">约 220 词</option><option value="260">约 260 词</option><option value="300">约 300 词</option><option value="340">约 340 词</option></select></div>
+            <div><label class="field-label" for="density">目标词密度</label><select id="density"><option value="sparse">稀疏</option><option value="normal" selected>正常</option><option value="dense">密集</option></select></div>
           </div>
-          <label class="toggle-row"><input id="translation" type="checkbox" /><span><b>生成中文全文翻译</b><small>默认关闭，会增加发送内容和模型费用</small></span></label>
+          <div class="target-preview" role="status" aria-live="polite">
+            <p class="field-label">目标词预览</p>
+            <p id="target-preview-count">预计使用 0 个目标词</p>
+            <p id="target-preview-words" class="helper">先在上方粘贴词汇。</p>
+          </div>
+          <fieldset class="type-fieldset">
+            <legend class="field-label">练习题型（选 2–5 种，固定 5 题，每种至少 1 道）</legend>
+            <div id="question-types" class="type-grid"></div>
+            <p id="type-hint" class="field-hint" role="status" aria-live="polite"></p>
+          </fieldset>
+<label class="toggle-row"><input id="translation" type="checkbox" /><span><b>生成中文全文翻译</b><small>默认关闭，会增加发送内容和模型费用</small></span></label>
           <div class="button-row"><button id="generate-button" class="button primary" type="button" disabled>先搜索并选择热点</button><span id="generation-state" class="inline-state" role="status" aria-live="polite"></span></div>
           <div id="generation-detail" class="generation-detail" hidden></div>
         </section>

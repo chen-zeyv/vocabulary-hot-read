@@ -1,12 +1,13 @@
 "use strict";
 
 // 递增此版本号可让新外壳立即替换旧缓存；每次改动白名单文件后都要递增。
-const CACHE_NAME = "vocabulary-hot-read-shell-v12";
+const CACHE_NAME = "vocabulary-hot-read-shell-v17";
 const SHELL_FILES = [
   "./",
   "./index.html",
   "./styles.css",
   "./lesson-coverage.js",
+  "./learning-options.js",
   "./app.js",
   "./manifest.webmanifest",
   "./icons/icon-master.svg",

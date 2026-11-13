@@ -224,6 +224,98 @@
     return { total: count, ok, failed, level, message };
   }
 
+  // ---------- 来源文章原图（第 18 轮） ----------
+  // 只从 Fetch 返回的 Markdown 正文里提取原始图片地址：不生成图、不用图库、不下载图片字节。
+  const IMAGE_LIMIT = 2;
+  const IMAGE_ALT_MAX = 120;
+  const CONTENT_SCAN_MAX = 400000;
+
+  function isLikelyTrackingPixel(href) {
+    const value = String(href == null ? "" : href).toLowerCase();
+    if (/[?&](?:w|width|h|height)=1(?:&|$)/.test(value)) return true;
+    return /(?:1x1|spacer\.(?:gif|png)|pixel\.(?:gif|png)|px\.(?:gif|png)|stats?\.(?:gif|png)|tracking-pixel|beacon\.(?:gif|png)|transparent\.(?:gif|png))/.test(value);
+  }
+
+  function normalizeImageUrl(raw, baseUrl) {
+    const value = String(raw == null ? "" : raw).trim().replace(/^<|>$/g, "");
+    if (!value) return null;
+    if (/^(?:data|blob|javascript|file|about):/i.test(value)) return null;
+    let resolved;
+    try {
+      resolved = baseUrl ? new URL(value, baseUrl) : new URL(value);
+    } catch {
+      return null;
+    }
+    if (resolved.protocol !== "https:") return null;
+    if (resolved.username || resolved.password) return null;
+    resolved.hash = "";
+    return resolved.href;
+  }
+
+  // alt 太短、只是文件名或是 image / photo 一类空词时，宁可返回空字符串，也不给读屏制造噪音。
+  function cleanImageAlt(raw) {
+    const value = String(raw == null ? "" : raw).replace(/\s+/g, " ").trim();
+    if (!value || value.length < 4) return "";
+    if (/^(?:image|photo|picture|img|pic|figure)$/i.test(value)) return "";
+    if (/^[^\s]+\.(?:jpe?g|png|gif|webp|avif|svg)$/i.test(value)) return "";
+    const chars = Array.from(value);
+    return chars.length > IMAGE_ALT_MAX ? chars.slice(0, IMAGE_ALT_MAX - 1).join("") + "…" : value;
+  }
+
+  // 返回 [{ url, alt }]，最多 IMAGE_LIMIT 张。相对地址按文章地址补全；非 HTTPS、跨域凭据、追踪像素与重复图片都丢弃。
+  function extractSourceImages(content, baseUrl, limit) {
+    const max = Number.isInteger(limit) && limit > 0 ? Math.min(limit, IMAGE_LIMIT) : IMAGE_LIMIT;
+    const text = String(content == null ? "" : content).slice(0, CONTENT_SCAN_MAX);
+    const found = [];
+    if (!text) return found;
+    const seen = new Set();
+    const push = (href, alt) => {
+      if (found.length >= max) return false;
+      const url = normalizeImageUrl(href, baseUrl);
+      if (!url || isLikelyTrackingPixel(url)) return false;
+      let key;
+      try {
+        const parsed = new URL(url);
+        key = (parsed.hostname + parsed.pathname).toLowerCase();
+      } catch {
+        return false;
+      }
+      if (seen.has(key)) return false;
+      seen.add(key);
+      found.push({ url, alt: cleanImageAlt(alt) });
+      return true;
+    };
+    // 先按 Markdown 图片语法取；官方文档说明 Fetch 正文是 Markdown。
+    const markdownPattern = /!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)/g;
+    let match;
+    while (found.length < max && (match = markdownPattern.exec(text)) !== null) {
+      push(match[2], match[1]);
+    }
+    // 正文里可能夹着原始 HTML 的 img 标签，同样只取原始地址。
+    if (found.length < max) {
+      const htmlPattern = /<img\b[^>]*>/gi;
+      while (found.length < max && (match = htmlPattern.exec(text)) !== null) {
+        const tag = match[0];
+        const altMatch = /\balt\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag);
+        const alt = altMatch ? altMatch[1] || altMatch[2] : "";
+        // 懒加载图片常把真实地址放在 data-src 一类属性里，src 只是占位图。
+        const candidates = [];
+        for (const name of ["src", "data-src", "data-original", "data-lazy-src", "data-actualsrc"]) {
+          const foundAttr = new RegExp("\\b" + name + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')", "i").exec(tag);
+          if (foundAttr) candidates.push(foundAttr[1] || foundAttr[2]);
+        }
+        const srcset = /\bsrcset\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag);
+        if (srcset) {
+          const first = String(srcset[1] || srcset[2] || "").split(",")[0].trim().split(/\s+/)[0];
+          if (first) candidates.push(first);
+        }
+        for (const candidate of candidates) {
+          if (push(candidate, alt)) break;
+        }
+      }
+    }
+    return found;
+  }
   return {
     countChars,
     TAG_MAX_LENGTH,
@@ -255,5 +347,7 @@
     allocateQuestionTypes,
     validateQuestions,
     summarizeCandidateTranslations,
+    IMAGE_LIMIT,
+    extractSourceImages,
   };
 });

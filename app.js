@@ -36,7 +36,13 @@
     translationSummary: null,
     questionTypes: Options.DEFAULT_QUESTION_TYPES.slice(),
     lastConsumedWords: [],
+    // 来源文章原图：只保存原始图片地址与 alt，不保存任何图片字节。
+    sourceImages: [],
+    imageStatus: "idle",
+    imageFetchedFor: "",
   };
+  // 来源原图渲染签名：本页内同一份图组不重复重建节点。
+  let lastImageSignature = "";
   const $ = (selector) => document.querySelector(selector);
   const wordsInput = $("#words");
   // 生成后自动移除已用词时，不能触发 resetGeneratedContent，否则刚出的文章会被清掉。
@@ -149,6 +155,10 @@
     state.translationError = "";
     state.translationUsed = false;
     state.translationSummary = null;
+    state.sourceImages = [];
+    state.imageStatus = "idle";
+    state.imageFetchedFor = "";
+    lastImageSignature = "";
     closeRevisionDialog({ restoreFocus: false });
     candidatesElement.replaceChildren();
     resultElement.replaceChildren();
@@ -941,9 +951,12 @@
         state.generationError = `模型返回结构无效，未生成可判分练习：${error.message}`;
         state.generationRaw = redactSecret(raw || readProviderErrorMessage(payload) || JSON.stringify(payload).slice(0, 12000), key);
       }
+      const readingReady = hasReadingContent();
+      // 取原图与生成并行：这里先同步置为 loading，再由异步请求回填，不阻塞文章显示。
+      if (readingReady) ensureArticleImages(candidate, key);
       setState("#generation-state", state.generationError || "生成完成。答案已隐藏，提交后才会显示。", state.generationError ? "error" : "success");
       renderResult();
-      if (hasReadingContent()) setMobileStage(2);
+      if (readingReady) setMobileStage(2);
     } catch (error) {
       const detail = classifyError(error, error.response);
       const providerDetail = redactSecret(readProviderErrorMessage(error.payload), key);
@@ -1163,6 +1176,125 @@
     });
   }
 
+  // ---------- 来源文章原图 ----------
+  // 取原图是可选增强：独立一次 Fetch 请求，失败不阻塞阅读与判分，也不自动重试。
+
+  function imageSignature(candidate) {
+    if (!candidate) return "";
+    return [state.imageStatus, candidate.url, (state.sourceImages || []).map((item) => item.url).join(" ")].join("|");
+  }
+
+  function renderSourceImageEmpty(slot, message) {
+    slot.innerHTML = `<section class="result-panel source-image-panel"><p class="source-image-badge">来源文章原图</p><p class="source-image-empty">${escapeHtml(message)}</p></section>`;
+  }
+
+  function renderSourceImageSlot() {
+    const slot = $("#source-image-slot");
+    if (!slot) return;
+    const candidate = state.candidates[state.selectedCandidate];
+    if (!candidate) {
+      slot.replaceChildren();
+      lastImageSignature = "";
+      return;
+    }
+    const signature = imageSignature(candidate);
+    // 同一份图组不重复重建，避免提交答案时图片重新加载。
+    if (signature === lastImageSignature && slot.childElementCount) return;
+    lastImageSignature = signature;
+    const images = state.sourceImages || [];
+    if (state.imageStatus === "loading" && !images.length) {
+      slot.innerHTML = `<section class="result-panel source-image-panel"><p class="source-image-badge">来源文章原图</p><div class="source-image-loading" role="status">正在加载来源图片…</div></section>`;
+      return;
+    }
+    if (!images.length) {
+      renderSourceImageEmpty(slot, state.imageStatus === "error"
+        ? "未获取到来源原图。取原图请求未成功，不影响阅读与做题。"
+        : "未获取到来源原图。本文仍可正常阅读与做题。");
+      return;
+    }
+    const caption = `<b>${escapeHtml(candidate.sourceName)}</b>${candidate.title ? ` · ${escapeHtml(candidate.title)}` : ""}`;
+    const figures = images.map((image, index) => {
+      const order = images.length > 1 ? ` ${index + 1}` : "";
+      // alt 只写来源原图和图片自身的描述，不写站点名、URL，也不写“点击查看大图”。
+      const altText = image.alt
+        ? `来源文章原图${order}：${image.alt}`
+        : `来源文章中的原图${order}，图注：${candidate.title || "来源文章"}`;
+      return [
+        `<figure class="source-figure">`,
+        `<div class="source-figure-frame"><img class="source-image" src="${escapeHtml(image.url)}" alt="${escapeHtml(altText)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-image-index="${index}" /></div>`,
+        `<figcaption class="source-figure-caption"><span class="source-figure-meta">${caption}</span>`,
+        `<a class="source-figure-link" href="${escapeHtml(candidate.url)}" target="_blank" rel="noopener noreferrer">查看来源文章 ↗<span class="sr-only">（在新标签页打开）</span></a></figcaption>`,
+        `<details class="source-image-url"><summary>原始图片地址</summary>`,
+        `<div class="source-image-url-row"><code class="source-image-url-text">${escapeHtml(image.url)}</code>`,
+        `<button type="button" class="url-copy" data-copy-index="${index}" aria-label="复制图片地址">复制</button></div>`,
+        `<span class="inline-state" role="status" data-copy-state="${index}"></span></details>`,
+        `</figure>`,
+      ].join("");
+    }).join("");
+    slot.innerHTML = `<section class="result-panel source-image-panel"><p class="source-image-badge">来源文章原图</p><div class="source-image-grid" data-count="${images.length}">${figures}</div><p class="helper">图片由浏览器直接从来源站点加载，不是生成图；来源站点限制外链时会显示为不可用。</p></section>`;
+    // 单张失败就整块移除，不显示破图；全部失败时退回同一句中性的无图提示。
+    slot.querySelectorAll(".source-image").forEach((img) => {
+      img.addEventListener("error", () => {
+        img.closest(".source-figure")?.remove();
+        const grid = slot.querySelector(".source-image-grid");
+        if (grid && !grid.querySelector(".source-figure")) {
+          renderSourceImageEmpty(slot, "未获取到来源原图。图片可能被来源站点限制外链，不影响阅读与做题。");
+        }
+      });
+    });
+    slot.querySelectorAll(".url-copy").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const index = Number(button.dataset.copyIndex);
+        const image = (state.sourceImages || [])[index];
+        const note = slot.querySelector(`[data-copy-state="${index}"]`);
+        if (!image) return;
+        try {
+          await navigator.clipboard.writeText(image.url);
+          if (note) note.textContent = "已复制";
+        } catch {
+          if (note) note.textContent = "已选中，请按 Ctrl+C 复制";
+          const text = slot.querySelectorAll(".source-image-url-text")[index];
+          if (text && window.getSelection) {
+            const range = document.createRange();
+            range.selectNodeContents(text);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+        }
+        window.setTimeout(() => { if (note) note.textContent = ""; }, 1600);
+      });
+    });
+  }
+
+  async function ensureArticleImages(candidate, key) {
+    if (!candidate || !candidate.url || !key) return;
+    if (state.imageFetchedFor === candidate.url) return;
+    const requestUrl = candidate.url;
+    state.imageFetchedFor = requestUrl;
+    state.sourceImages = [];
+    state.imageStatus = "loading";
+    // 取图是异步的：返回时必须确认会话仍是发起请求时的候选，避免旧响应写回新文章或清空后的页面。
+    const stillCurrent = () => state.imageFetchedFor === requestUrl
+      && state.selectedCandidate >= 0
+      && Boolean(state.candidates[state.selectedCandidate])
+      && state.candidates[state.selectedCandidate].url === requestUrl
+      && hasReadingContent();
+    try {
+      const payload = await postJson("https://api.deepseek.com/v1/tools/fetch", key, { url: requestUrl }, 30000);
+      if (!stillCurrent()) return;
+      const content = typeof payload?.content === "string" ? payload.content : "";
+      const images = Options.extractSourceImages(content, requestUrl);
+      state.sourceImages = images;
+      state.imageStatus = images.length ? "ready" : "none";
+    } catch {
+      if (!stillCurrent()) return;
+      state.sourceImages = [];
+      state.imageStatus = "error";
+    }
+    renderSourceImageSlot();
+  }
+
   function renderResult() {
     if (!resultElement) return;
     renderGenerationDetail();
@@ -1220,9 +1352,11 @@
         <div class="article-body">${renderArticle(lesson.article, targetWords)}</div>
         <ul class="source-list">${createSource(candidate)}</ul>
       </section>
+      <div id="source-image-slot"></div>
       <section class="result-panel"><p class="result-kicker">词汇学习</p><h2>目标词与词义</h2><ul class="word-list">${wordsMarkup}</ul>${omittedMarkup}</section>
       ${lesson.uncoveredWords.length && !state.incompleteAccepted ? `<section class="result-panel incomplete-actions"><p class="result-kicker">文章尚未完成</p><h2>目标词没有全部出现</h2><p>练习暂不可用。你可以确认后请求一次修订，或接受当前文章并继续。</p><div class="button-row"><button class="button primary" id="revise-button" type="button" ${state.revisionUsed ? "disabled" : ""}>确认修订一次</button><button class="button secondary" id="accept-incomplete" type="button">接受当前文章</button></div><p class="helper">${state.revisionUsed ? "已使用一次修订机会；不会再次发送请求。" : "修订会额外发送一次请求，可能产生费用。只有确认后才会发送。"}</p></section>` : `<section class="result-panel"><p class="result-kicker">浏览器本地判分</p><h2>检查理解</h2><form id="quiz-form"><div class="quiz-list">${questions}</div><div class="button-row"><button class="button primary" id="submit-quiz" type="submit" ${state.submitted ? "disabled" : ""}>${state.submitted ? "已提交" : "提交答案并查看解析"}</button><span id="quiz-progress" class="inline-state" role="status"></span><span id="quiz-score" class="inline-state" role="status"></span></div></form></section>`}
       ${translation}`;
+    renderSourceImageSlot();
     resultElement.querySelectorAll(".target-word").forEach((mark, index) => {
       // 词形不同（如目标词 resilience、文中写 resilient）时也要能对上释义面板。
       const surfaceText = mark.textContent.trim().toLocaleLowerCase();

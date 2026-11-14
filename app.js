@@ -40,6 +40,10 @@
     sourceImages: [],
     imageStatus: "idle",
     imageFetchedFor: "",
+    // 本页内的取图结果：url -> { status, images }，只存图片地址与 alt，不存图片字节。
+    imageCache: Object.create(null),
+    // 会话代号：清空本页后递增，用于丢弃旧会话里仍在路上的 Fetch 响应。
+    imageEpoch: 0,
   };
   // 来源原图渲染签名：本页内同一份图组不重复重建节点。
   let lastImageSignature = "";
@@ -1269,28 +1273,50 @@
 
   async function ensureArticleImages(candidate, key) {
     if (!candidate || !candidate.url || !key) return;
-    if (state.imageFetchedFor === candidate.url) return;
     const requestUrl = candidate.url;
+    // 每个候选在本页内最多取图一次：命中已取过的地址就不再请求，切走再切回与修订都复用同一份结果。
+    const cached = state.imageCache[requestUrl];
+    if (cached) {
+      state.sourceImages = cached.images.slice();
+      state.imageStatus = cached.status;
+      renderSourceImageSlot();
+      return;
+    }
+    if (state.imageFetchedFor === requestUrl) return;
     state.imageFetchedFor = requestUrl;
     state.sourceImages = [];
     state.imageStatus = "loading";
-    // 取图是异步的：返回时必须确认会话仍是发起请求时的候选，避免旧响应写回新文章或清空后的页面。
-    const stillCurrent = () => state.imageFetchedFor === requestUrl
+    const epoch = state.imageEpoch;
+    // 取图是异步的：返回时必须确认仍在同一会话、同一候选，避免旧响应写回新文章或清空后的页面。
+    const stillCurrent = () => state.imageEpoch === epoch
+      && state.imageFetchedFor === requestUrl
       && state.selectedCandidate >= 0
       && Boolean(state.candidates[state.selectedCandidate])
       && state.candidates[state.selectedCandidate].url === requestUrl
       && hasReadingContent();
+    // 只有会话未被清空时才记住结果；清空后的迟到响应既不显示，也不进缓存。
+    const remember = (entry) => {
+      if (state.imageEpoch !== epoch) return;
+      state.imageCache[requestUrl] = entry;
+    };
     try {
       const payload = await postJson("https://api.deepseek.com/v1/tools/fetch", key, { url: requestUrl }, 30000);
-      if (!stillCurrent()) return;
       const content = typeof payload?.content === "string" ? payload.content : "";
       const images = Options.extractSourceImages(content, requestUrl);
-      state.sourceImages = images;
-      state.imageStatus = images.length ? "ready" : "none";
+      const entry = { status: images.length ? "ready" : "none", images };
+      remember(entry);
+      if (stillCurrent()) {
+        state.sourceImages = entry.images;
+        state.imageStatus = entry.status;
+      }
     } catch {
-      if (!stillCurrent()) return;
-      state.sourceImages = [];
-      state.imageStatus = "error";
+      remember({ status: "error", images: [] });
+      if (stillCurrent()) {
+        state.sourceImages = [];
+        state.imageStatus = "error";
+      }
+    } finally {
+      if (state.imageFetchedFor === requestUrl) state.imageFetchedFor = "";
     }
     renderSourceImageSlot();
   }
@@ -1502,6 +1528,13 @@
     state.translationError = "";
     state.translationUsed = false;
     state.translationSummary = null;
+    // 清空本页是新的会话：图片结果、缓存与会话代号一起重置，旧响应不会再被复用。
+    state.sourceImages = [];
+    state.imageStatus = "idle";
+    state.imageFetchedFor = "";
+    state.imageCache = Object.create(null);
+    state.imageEpoch += 1;
+    lastImageSignature = "";
     candidatesElement.replaceChildren();
     resultElement.replaceChildren();
     resultElement.hidden = true;

@@ -285,33 +285,38 @@
       found.push({ url, alt: cleanImageAlt(alt) });
       return true;
     };
-    // 先按 Markdown 图片语法取；官方文档说明 Fetch 正文是 Markdown。
+    // 正文是 Markdown，也可能夹着原始 HTML 的 img 标签：两类图片先按原文出现位置合并，
+    // 再按顺序取前两张，保证顺序与正文一致，而不是某一类写法优先。
+    const candidates = [];
     const markdownPattern = /!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)/g;
     let match;
-    while (found.length < max && (match = markdownPattern.exec(text)) !== null) {
-      push(match[2], match[1]);
+    while ((match = markdownPattern.exec(text)) !== null) {
+      candidates.push({ index: match.index, href: match[2], alt: match[1], single: true });
     }
-    // 正文里可能夹着原始 HTML 的 img 标签，同样只取原始地址。
-    if (found.length < max) {
-      const htmlPattern = /<img\b[^>]*>/gi;
-      while (found.length < max && (match = htmlPattern.exec(text)) !== null) {
-        const tag = match[0];
-        const altMatch = /\balt\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag);
-        const alt = altMatch ? altMatch[1] || altMatch[2] : "";
-        // 懒加载图片常把真实地址放在 data-src 一类属性里，src 只是占位图。
-        const candidates = [];
-        for (const name of ["src", "data-src", "data-original", "data-lazy-src", "data-actualsrc"]) {
-          const foundAttr = new RegExp("\\b" + name + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')", "i").exec(tag);
-          if (foundAttr) candidates.push(foundAttr[1] || foundAttr[2]);
-        }
-        const srcset = /\bsrcset\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag);
-        if (srcset) {
-          const first = String(srcset[1] || srcset[2] || "").split(",")[0].trim().split(/\s+/)[0];
-          if (first) candidates.push(first);
-        }
-        for (const candidate of candidates) {
-          if (push(candidate, alt)) break;
-        }
+    // 懒加载图片常把真实地址放在 data-src 一类属性里，src 只是占位图。
+    const htmlPattern = /<img\b[^>]*>/gi;
+    while ((match = htmlPattern.exec(text)) !== null) {
+      const tag = match[0];
+      const altMatch = /\balt\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag);
+      const alt = altMatch ? altMatch[1] || altMatch[2] : "";
+      const sources = [];
+      for (const name of ["src", "data-src", "data-original", "data-lazy-src", "data-actualsrc"]) {
+        const foundAttr = new RegExp("\\b" + name + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')", "i").exec(tag);
+        if (foundAttr) sources.push(foundAttr[1] || foundAttr[2]);
+      }
+      const srcset = /\bsrcset\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag);
+      if (srcset) {
+        const first = String(srcset[1] || srcset[2] || "").split(",")[0].trim().split(/\s+/)[0];
+        if (first) sources.push(first);
+      }
+      if (sources.length) candidates.push({ index: match.index, href: sources, alt, single: false });
+    }
+    candidates.sort((a, b) => a.index - b.index);
+    for (const item of candidates) {
+      if (found.length >= max) break;
+      const sources = item.single ? [item.href] : item.href;
+      for (const source of sources) {
+        if (push(source, item.alt)) break;
       }
     }
     return found;

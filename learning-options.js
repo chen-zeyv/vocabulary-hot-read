@@ -287,28 +287,44 @@
     };
     // 正文是 Markdown，也可能夹着原始 HTML 的 img 标签：两类图片先按原文出现位置合并，
     // 再按顺序取前两张，保证顺序与正文一致，而不是某一类写法优先。
+    // 注释里的内容不属于正文，先替换成等长空格（保持下标不变），避免把注释中的 img 当成图片。
+    const scan = text.replace(/<!--[\s\S]*?-->/g, (chunk) => " ".repeat(chunk.length));
     const candidates = [];
+    const attrValue = (tag, name) => {
+      const hit = new RegExp("(?:^|[\\s\"'/<])" + name + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')", "i").exec(tag);
+      return hit ? hit[1] || hit[2] : "";
+    };
+    const firstSrcsetUrl = (value) => String(value || "").split(",")[0].trim().split(/\s+/)[0];
     const markdownPattern = /!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)/g;
     let match;
-    while ((match = markdownPattern.exec(text)) !== null) {
+    while ((match = markdownPattern.exec(scan)) !== null) {
       candidates.push({ index: match.index, href: match[2], alt: match[1], single: true });
     }
-    // 懒加载图片常把真实地址放在 data-src 一类属性里，src 只是占位图。
+    // <picture> 的 <source srcset> 只在内层 img 没有可用地址时兜底：内层 img 的 src 仍然优先。
+    const pictureSources = [];
+    const picturePattern = /<picture\b[^>]*>([\s\S]*?)<\/picture>/gi;
+    while ((match = picturePattern.exec(scan)) !== null) {
+      const sourceTag = /<source\b[^>]*>/i.exec(match[1]);
+      if (!sourceTag) continue;
+      const href = firstSrcsetUrl(attrValue(sourceTag[0], "srcset"));
+      if (href) pictureSources.push({ start: match.index, end: match.index + match[0].length, href });
+    }
+    // 懒加载图片常把真实地址放在 data-src 一类属性里，src 只是占位图，所以懒加载属性排在 src 前面。
     const htmlPattern = /<img\b[^>]*>/gi;
-    while ((match = htmlPattern.exec(text)) !== null) {
+    while ((match = htmlPattern.exec(scan)) !== null) {
       const tag = match[0];
-      const altMatch = /\balt\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag);
-      const alt = altMatch ? altMatch[1] || altMatch[2] : "";
+      const alt = attrValue(tag, "alt");
       const sources = [];
-      for (const name of ["src", "data-src", "data-original", "data-lazy-src", "data-actualsrc"]) {
-        const foundAttr = new RegExp("\\b" + name + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')", "i").exec(tag);
-        if (foundAttr) sources.push(foundAttr[1] || foundAttr[2]);
+      for (const name of ["data-src", "data-original", "data-lazy-src", "data-actualsrc"]) {
+        const value = attrValue(tag, name);
+        if (value) sources.push(value);
       }
-      const srcset = /\bsrcset\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag);
-      if (srcset) {
-        const first = String(srcset[1] || srcset[2] || "").split(",")[0].trim().split(/\s+/)[0];
-        if (first) sources.push(first);
-      }
+      const src = attrValue(tag, "src");
+      if (src) sources.push(src);
+      const srcset = firstSrcsetUrl(attrValue(tag, "srcset"));
+      if (srcset) sources.push(srcset);
+      const picture = pictureSources.find((item) => match.index >= item.start && match.index < item.end);
+      if (picture) sources.push(picture.href);
       if (sources.length) candidates.push({ index: match.index, href: sources, alt, single: false });
     }
     candidates.sort((a, b) => a.index - b.index);

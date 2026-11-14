@@ -38,10 +38,10 @@
         <button type="button" data-stage-button="1" aria-pressed="false"><span>02</span>选热点</button>
         <button type="button" data-stage-button="2" aria-pressed="false"><span>03</span>阅读与练习</button>
       </nav>
-      <p class="send-scope" role="note">发送范围：热点搜索只发送标签、内容范围和最近 7 天给 DeepSeek Search；点「用当前位置」时，坐标只发给浏览器定位服务与 BigDataCloud 换取城市名，页面不保存坐标；候选中文翻译发送候选标题与摘要；生成时把目标词、所选热点资料和写作要求发送给 DeepSeek Chat。生成成功后会把所选来源文章的 URL 发给 DeepSeek Fetch，最多一次，用于从原文中提取 1–2 张原图，可能产生一次请求费用；图片由浏览器直接从来源站点加载，本页不转存图片。费用由你的账户承担，密钥只在本页会话内存中使用。</p>
+      <p class="send-scope" role="note">发送范围：热点搜索只发送标签、内容范围和最近 7 天给 DeepSeek Search；点「用当前位置」时，坐标只发给浏览器定位服务与 BigDataCloud 换取城市名，页面不保存坐标；候选中文翻译发送候选标题与摘要；生成时把目标词、所选热点资料和写作要求发送给 DeepSeek Chat。生成文章后会把所选来源文章的链接发给 microlink.io，用于取该文章的一张配图；不发送词汇、密钥、文章内容或做题答案。费用由你的账户承担，密钥只在本页会话内存中使用。</p>
       <section class="notice" data-mobile-stage="0" aria-label="隐私与费用说明">
         <strong>发送前请知悉</strong>
-        <p>本次试用仅使用 DeepSeek Search 搜索和 DeepSeek Chat Completions 生成。搜索按你选择的 1–5 个热点标签进行，只发送标签、内容范围和最近 7 天，不发送你输入的词汇；候选中文翻译开启时，会把候选的标题与摘要发给 DeepSeek；生成成功后会再把所选来源文章的 URL 发给 DeepSeek Fetch，最多一次，用于提取文中原图，可能产生一次费用；取不到图只显示中性提示，不影响阅读与做题。图片由浏览器直接从来源站点加载，本页不保存图片字节。费用由你自己的 DeepSeek 账户承担。密钥只保存在当前页面内存中，但页面脚本和开发者工具可以访问它；刷新页面会清除本页数据。</p>
+        <p>本次试用仅使用 DeepSeek Search 搜索和 DeepSeek Chat Completions 生成。搜索按你选择的 1–5 个热点标签进行，只发送标签、内容范围和最近 7 天，不发送你输入的词汇；候选中文翻译开启时，会把候选的标题与摘要发给 DeepSeek。费用由你自己的 DeepSeek 账户承担。生成文章后会把所选来源文章的链接发给 microlink.io，用于取该文章的一张配图；不发送词汇、密钥、文章内容或做题答案。密钥只保存在当前页面内存中，但页面脚本和开发者工具可以访问它；刷新页面会清除本页数据。</p>
         <label class="consent-row"><input id="consent" type="checkbox" /><span>我已了解数据发送对象和费用由本人承担。</span></label>
       </section>
       <section class="panel connection-panel" aria-labelledby="connection-heading">

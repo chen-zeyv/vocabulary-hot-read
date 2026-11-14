@@ -36,17 +36,8 @@
     translationSummary: null,
     questionTypes: Options.DEFAULT_QUESTION_TYPES.slice(),
     lastConsumedWords: [],
-    // 来源文章原图：只保存原始图片地址与 alt，不保存任何图片字节。
-    sourceImages: [],
-    imageStatus: "idle",
-    imageFetchedFor: "",
-    // 本页内的取图结果：url -> { status, images }，只存图片地址与 alt，不存图片字节。
-    imageCache: Object.create(null),
-    // 会话代号：清空本页后递增，用于丢弃旧会话里仍在路上的 Fetch 响应。
-    imageEpoch: 0,
+    articleImage: { url: "", pageUrl: "", width: null, height: null, status: "idle" },
   };
-  // 来源原图渲染签名：本页内同一份图组不重复重建节点。
-  let lastImageSignature = "";
   const $ = (selector) => document.querySelector(selector);
   const wordsInput = $("#words");
   // 生成后自动移除已用词时，不能触发 resetGeneratedContent，否则刚出的文章会被清掉。
@@ -55,6 +46,136 @@
   const generateButton = $("#generate-button");
   const candidatesElement = $("#candidate-list");
   const resultElement = $("#result");
+
+  // 来源文章配图：每篇只请求一次 microlink 元数据，结果按来源页面 URL 缓存在页面内存里。
+  const IMAGE_ENDPOINT = "https://api.microlink.io/";
+  const IMAGE_TIMEOUT_MS = 15000; // 实测冷启动 9.4 秒，8 秒会误杀成功请求。
+  const imageRequestCache = new Map();
+  let imageEpoch = 0;
+
+  function resetArticleImageState() {
+    imageEpoch += 1;
+    state.articleImage = { url: "", pageUrl: "", width: null, height: null, status: "idle" };
+  }
+
+  // 只接受可以直接放进 <img> 的 HTTPS 图片地址；logo／图标／头像／SVG 一律当无图。
+  function isAcceptableImageUrl(raw) {
+    if (typeof raw !== "string") return false;
+    const url = raw.trim();
+    if (!url || url.length >= 2000) return false;
+    if (/^(?:data|blob):/i.test(url)) return false;
+    let parsed;
+    try { parsed = new URL(url); } catch { return false; }
+    if (parsed.protocol !== "https:") return false;
+    if (/\.svg$/i.test(parsed.pathname)) return false;
+    const path = `${parsed.pathname}${parsed.search}`.toLocaleLowerCase();
+    // 按分隔符边界判定，避免把 iconic-climate.jpg 这类正常照片当成图标拒掉。
+    if (/(?:^|[\/_.-])(?:logo|icon|avatar)(?:[\/_.-]|$)/.test(path)) return false;
+    return true;
+  }
+
+  function pickArticleImage(payload) {
+    if (!payload || payload.status !== "success") return null;
+    const image = payload.data && payload.data.image;
+    if (!image || typeof image.url !== "string") return null;
+    if (!isAcceptableImageUrl(image.url)) return null;
+    const width = Number(image.width);
+    const height = Number(image.height);
+    // 尺寸过小多半是站点标志；站点未声明尺寸时仍放行，由自适应宽度显示。
+    if (Number.isFinite(width) && width > 0 && width < 320) return null;
+    if (Number.isFinite(height) && height > 0 && height < 180) return null;
+    return {
+      url: image.url.trim(),
+      width: Number.isFinite(width) && width > 0 ? Math.round(width) : null,
+      height: Number.isFinite(height) && height > 0 ? Math.round(height) : null,
+    };
+  }
+
+  async function fetchArticleImage(pageUrl) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), IMAGE_TIMEOUT_MS);
+    try {
+      const response = await fetch(`${IMAGE_ENDPOINT}?url=${encodeURIComponent(pageUrl)}&meta=true`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      if (!response.ok) return null;
+      const payload = await response.json();
+      return pickArticleImage(payload);
+    } catch {
+      // 超时、网络、CORS 或 JSON 解析失败都按“无图”处理：不提示、不重试。
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // 同一来源 URL 成功、无图、失败、超时都记在内存里，之后复用，不再请求第二次。
+  async function loadArticleImage(candidate) {
+    const pageUrl = typeof candidate?.url === "string" ? candidate.url.trim() : "";
+    const epoch = ++imageEpoch;
+    state.articleImage = { url: "", pageUrl, width: null, height: null, status: pageUrl ? "loading" : "idle" };
+    if (!pageUrl) return;
+    let cached = imageRequestCache.get(pageUrl);
+    if (!cached) {
+      const image = await fetchArticleImage(pageUrl);
+      // 清空或换页后到达的迟到响应不写缓存，避免清空后又被旧结果填回来。
+      if (epoch !== imageEpoch) return;
+      cached = image ? { status: "ready", image } : { status: "none", image: null };
+      imageRequestCache.set(pageUrl, cached);
+    }
+    // 迟到响应：候选、文章或会话已经更换时不写回页面。
+    if (epoch !== imageEpoch) return;
+    if (cached.status === "ready" && cached.image) {
+      state.articleImage = { url: cached.image.url, pageUrl, width: cached.image.width, height: cached.image.height, status: "ready" };
+      mountArticleImage();
+    } else {
+      state.articleImage = { url: "", pageUrl, width: null, height: null, status: "none" };
+    }
+  }
+
+  function articleImageMarkup(candidate) {
+    const image = state.articleImage;
+    if (!image || image.status !== "ready" || !image.url || !candidate) return "";
+    const size = `${image.width ? ` width="${image.width}"` : ""}${image.height ? ` height="${image.height}"` : ""}`;
+    return `<figure class="article-figure"><img src="${escapeHtml(image.url)}" data-source-url="${escapeHtml(image.url)}" loading="lazy" decoding="async" alt="来源文章配图：${escapeHtml(candidate.title)}"${size}><figcaption>${escapeHtml(candidate.sourceName)} · ${escapeHtml(candidate.title)}<br><a href="${escapeHtml(candidate.url)}" target="_blank" rel="noopener noreferrer">查看来源文章 ↗</a> · 来源文章配图，站点限制时可能无法显示</figcaption></figure>`;
+  }
+
+  // 直连被防盗链拦住时换 microlink 的 embed=image 代理再试一次；再失败就整块移除。
+  function wireArticleImage() {
+    const img = resultElement ? resultElement.querySelector(".article-figure img") : null;
+    if (!img || img.dataset.wired === "1") return;
+    img.dataset.wired = "1";
+    img.addEventListener("error", () => {
+      const figure = img.closest(".article-figure");
+      if (!figure) return;
+      if (img.dataset.retried !== "1") {
+        img.dataset.retried = "1";
+        img.src = `${IMAGE_ENDPOINT}?url=${encodeURIComponent(img.dataset.sourceUrl || "")}&embed=image`;
+        return;
+      }
+      figure.remove();
+      state.articleImage = { ...state.articleImage, url: "", status: "none" };
+    });
+  }
+
+  // 异步插图只插入当前 DOM，不重绘结果区，避免丢失尚未提交的答题状态。
+  function mountArticleImage() {
+    if (!resultElement || state.articleImage.status !== "ready") return;
+    const candidate = state.candidates[state.selectedCandidate];
+    if (!candidate || !state.generated) return;
+    if (resultElement.querySelector(".article-figure")) { wireArticleImage(); return; }
+    const body = resultElement.querySelector(".article-body");
+    if (!body) return;
+    const template = document.createElement("template");
+    template.innerHTML = articleImageMarkup(candidate).trim();
+    const figure = template.content.firstElementChild;
+    if (!figure) return;
+    body.insertAdjacentElement("afterend", figure);
+    wireArticleImage();
+  }
 
   function hasReadingContent() {
     return Boolean(state.generated && Array.isArray(state.generated.questions) && state.generated.questions.length === 5);
@@ -159,10 +280,7 @@
     state.translationError = "";
     state.translationUsed = false;
     state.translationSummary = null;
-    state.sourceImages = [];
-    state.imageStatus = "idle";
-    state.imageFetchedFor = "";
-    lastImageSignature = "";
+    resetArticleImageState();
     closeRevisionDialog({ restoreFocus: false });
     candidatesElement.replaceChildren();
     resultElement.replaceChildren();
@@ -605,6 +723,7 @@
     state.generationError = "";
     state.generationRaw = "";
     state.submitted = false;
+    resetArticleImageState();
     renderCandidates();
     renderResult();
     setState("#generation-state", "候选已选择。确认后会将词汇和这条资料发送给所选模型。");
@@ -956,11 +1075,13 @@
         state.generationRaw = redactSecret(raw || readProviderErrorMessage(payload) || JSON.stringify(payload).slice(0, 12000), key);
       }
       const readingReady = hasReadingContent();
-      // 取原图与生成并行：这里先同步置为 loading，再由异步请求回填，不阻塞文章显示。
-      if (readingReady) ensureArticleImages(candidate, key);
       setState("#generation-state", state.generationError || "生成完成。答案已隐藏，提交后才会显示。", state.generationError ? "error" : "success");
       renderResult();
-      if (readingReady) setMobileStage(2);
+      if (readingReady) {
+        setMobileStage(2);
+        // 文章渲染完成后再取一次来源配图；同一来源 URL 命中内存缓存时不发请求。
+        loadArticleImage(candidate).catch(() => {});
+      }
     } catch (error) {
       const detail = classifyError(error, error.response);
       const providerDetail = redactSecret(readProviderErrorMessage(error.payload), key);
@@ -1180,147 +1301,6 @@
     });
   }
 
-  // ---------- 来源文章原图 ----------
-  // 取原图是可选增强：独立一次 Fetch 请求，失败不阻塞阅读与判分，也不自动重试。
-
-  function imageSignature(candidate) {
-    if (!candidate) return "";
-    return [state.imageStatus, candidate.url, (state.sourceImages || []).map((item) => item.url).join(" ")].join("|");
-  }
-
-  function renderSourceImageEmpty(slot, message) {
-    slot.innerHTML = `<section class="result-panel source-image-panel"><p class="source-image-badge">来源文章原图</p><p class="source-image-empty">${escapeHtml(message)}</p></section>`;
-  }
-
-  function renderSourceImageSlot() {
-    const slot = $("#source-image-slot");
-    if (!slot) return;
-    const candidate = state.candidates[state.selectedCandidate];
-    if (!candidate) {
-      slot.replaceChildren();
-      lastImageSignature = "";
-      return;
-    }
-    const signature = imageSignature(candidate);
-    // 同一份图组不重复重建，避免提交答案时图片重新加载。
-    if (signature === lastImageSignature && slot.childElementCount) return;
-    lastImageSignature = signature;
-    const images = state.sourceImages || [];
-    if (state.imageStatus === "loading" && !images.length) {
-      slot.innerHTML = `<section class="result-panel source-image-panel"><p class="source-image-badge">来源文章原图</p><div class="source-image-loading" role="status">正在加载来源图片…</div></section>`;
-      return;
-    }
-    if (!images.length) {
-      renderSourceImageEmpty(slot, state.imageStatus === "error"
-        ? "未获取到来源原图。取原图请求未成功，不影响阅读与做题。"
-        : "未获取到来源原图。本文仍可正常阅读与做题。");
-      return;
-    }
-    const caption = `<b>${escapeHtml(candidate.sourceName)}</b>${candidate.title ? ` · ${escapeHtml(candidate.title)}` : ""}`;
-    const figures = images.map((image, index) => {
-      const order = images.length > 1 ? ` ${index + 1}` : "";
-      // alt 只写来源原图和图片自身的描述，不写站点名、URL，也不写“点击查看大图”。
-      const altText = image.alt
-        ? `来源文章原图${order}：${image.alt}`
-        : `来源文章中的原图${order}，图注：${candidate.title || "来源文章"}`;
-      return [
-        `<figure class="source-figure">`,
-        `<div class="source-figure-frame"><img class="source-image" src="${escapeHtml(image.url)}" alt="${escapeHtml(altText)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-image-index="${index}" /></div>`,
-        `<figcaption class="source-figure-caption"><span class="source-figure-meta">${caption}</span>`,
-        `<a class="source-figure-link" href="${escapeHtml(candidate.url)}" target="_blank" rel="noopener noreferrer">查看来源文章 ↗<span class="sr-only">（在新标签页打开）</span></a></figcaption>`,
-        `<details class="source-image-url"><summary>原始图片地址</summary>`,
-        `<div class="source-image-url-row"><code class="source-image-url-text">${escapeHtml(image.url)}</code>`,
-        `<button type="button" class="url-copy" data-copy-index="${index}" aria-label="复制图片地址">复制</button></div>`,
-        `<span class="inline-state" role="status" data-copy-state="${index}"></span></details>`,
-        `</figure>`,
-      ].join("");
-    }).join("");
-    slot.innerHTML = `<section class="result-panel source-image-panel"><p class="source-image-badge">来源文章原图</p><div class="source-image-grid" data-count="${images.length}">${figures}</div><p class="helper">图片由浏览器直接从来源站点加载，不是生成图；来源站点限制外链时会显示为不可用。</p></section>`;
-    // 单张失败就整块移除，不显示破图；全部失败时退回同一句中性的无图提示。
-    slot.querySelectorAll(".source-image").forEach((img) => {
-      img.addEventListener("error", () => {
-        img.closest(".source-figure")?.remove();
-        const grid = slot.querySelector(".source-image-grid");
-        if (grid && !grid.querySelector(".source-figure")) {
-          renderSourceImageEmpty(slot, "未获取到来源原图。图片可能被来源站点限制外链，不影响阅读与做题。");
-        }
-      });
-    });
-    slot.querySelectorAll(".url-copy").forEach((button) => {
-      button.addEventListener("click", async () => {
-        const index = Number(button.dataset.copyIndex);
-        const image = (state.sourceImages || [])[index];
-        const note = slot.querySelector(`[data-copy-state="${index}"]`);
-        if (!image) return;
-        try {
-          await navigator.clipboard.writeText(image.url);
-          if (note) note.textContent = "已复制";
-        } catch {
-          if (note) note.textContent = "已选中，请按 Ctrl+C 复制";
-          const text = slot.querySelectorAll(".source-image-url-text")[index];
-          if (text && window.getSelection) {
-            const range = document.createRange();
-            range.selectNodeContents(text);
-            const selection = window.getSelection();
-            selection.removeAllRanges();
-            selection.addRange(range);
-          }
-        }
-        window.setTimeout(() => { if (note) note.textContent = ""; }, 1600);
-      });
-    });
-  }
-
-  async function ensureArticleImages(candidate, key) {
-    if (!candidate || !candidate.url || !key) return;
-    const requestUrl = candidate.url;
-    // 每个候选在本页内最多取图一次：命中已取过的地址就不再请求，切走再切回与修订都复用同一份结果。
-    const cached = state.imageCache[requestUrl];
-    if (cached) {
-      state.sourceImages = cached.images.slice();
-      state.imageStatus = cached.status;
-      renderSourceImageSlot();
-      return;
-    }
-    if (state.imageFetchedFor === requestUrl) return;
-    state.imageFetchedFor = requestUrl;
-    state.sourceImages = [];
-    state.imageStatus = "loading";
-    const epoch = state.imageEpoch;
-    // 取图是异步的：返回时必须确认仍在同一会话、同一候选，避免旧响应写回新文章或清空后的页面。
-    const stillCurrent = () => state.imageEpoch === epoch
-      && state.imageFetchedFor === requestUrl
-      && state.selectedCandidate >= 0
-      && Boolean(state.candidates[state.selectedCandidate])
-      && state.candidates[state.selectedCandidate].url === requestUrl
-      && hasReadingContent();
-    // 只有会话未被清空时才记住结果；清空后的迟到响应既不显示，也不进缓存。
-    const remember = (entry) => {
-      if (state.imageEpoch !== epoch) return;
-      state.imageCache[requestUrl] = entry;
-    };
-    try {
-      const payload = await postJson("https://api.deepseek.com/v1/tools/fetch", key, { url: requestUrl }, 30000);
-      const content = typeof payload?.content === "string" ? payload.content : "";
-      const images = Options.extractSourceImages(content, requestUrl);
-      const entry = { status: images.length ? "ready" : "none", images };
-      remember(entry);
-      if (stillCurrent()) {
-        state.sourceImages = entry.images;
-        state.imageStatus = entry.status;
-      }
-    } catch {
-      remember({ status: "error", images: [] });
-      if (stillCurrent()) {
-        state.sourceImages = [];
-        state.imageStatus = "error";
-      }
-    } finally {
-      if (state.imageFetchedFor === requestUrl) state.imageFetchedFor = "";
-    }
-    renderSourceImageSlot();
-  }
-
   function renderResult() {
     if (!resultElement) return;
     renderGenerationDetail();
@@ -1376,13 +1356,12 @@
         <span id="speech-state" class="inline-state speech-state" role="status" aria-live="polite"></span>
         <p class="helper">来源：${escapeHtml(candidate.sourceName)} · 发布日期：${escapeHtml(candidate.publishedAt || "日期未知")} · 检索日期：${escapeHtml(state.searchTime)}</p>
         <div class="article-body">${renderArticle(lesson.article, targetWords)}</div>
+        ${articleImageMarkup(candidate)}
         <ul class="source-list">${createSource(candidate)}</ul>
       </section>
-      <div id="source-image-slot"></div>
       <section class="result-panel"><p class="result-kicker">词汇学习</p><h2>目标词与词义</h2><ul class="word-list">${wordsMarkup}</ul>${omittedMarkup}</section>
       ${lesson.uncoveredWords.length && !state.incompleteAccepted ? `<section class="result-panel incomplete-actions"><p class="result-kicker">文章尚未完成</p><h2>目标词没有全部出现</h2><p>练习暂不可用。你可以确认后请求一次修订，或接受当前文章并继续。</p><div class="button-row"><button class="button primary" id="revise-button" type="button" ${state.revisionUsed ? "disabled" : ""}>确认修订一次</button><button class="button secondary" id="accept-incomplete" type="button">接受当前文章</button></div><p class="helper">${state.revisionUsed ? "已使用一次修订机会；不会再次发送请求。" : "修订会额外发送一次请求，可能产生费用。只有确认后才会发送。"}</p></section>` : `<section class="result-panel"><p class="result-kicker">浏览器本地判分</p><h2>检查理解</h2><form id="quiz-form"><div class="quiz-list">${questions}</div><div class="button-row"><button class="button primary" id="submit-quiz" type="submit" ${state.submitted ? "disabled" : ""}>${state.submitted ? "已提交" : "提交答案并查看解析"}</button><span id="quiz-progress" class="inline-state" role="status"></span><span id="quiz-score" class="inline-state" role="status"></span></div></form></section>`}
       ${translation}`;
-    renderSourceImageSlot();
     resultElement.querySelectorAll(".target-word").forEach((mark, index) => {
       // 词形不同（如目标词 resilience、文中写 resilient）时也要能对上释义面板。
       const surfaceText = mark.textContent.trim().toLocaleLowerCase();
@@ -1427,6 +1406,7 @@
       wordElement.addEventListener("click", () => speakWord(wordElement.textContent));
     });
     if (state.submitted) showAnswers();
+    wireArticleImage();
     $("#quiz-form")?.addEventListener("submit", submitQuiz);
     $("#quiz-form")?.addEventListener("change", updateQuizProgress);
     if (!state.submitted) updateQuizProgress();
@@ -1528,13 +1508,8 @@
     state.translationError = "";
     state.translationUsed = false;
     state.translationSummary = null;
-    // 清空本页是新的会话：图片结果、缓存与会话代号一起重置，旧响应不会再被复用。
-    state.sourceImages = [];
-    state.imageStatus = "idle";
-    state.imageFetchedFor = "";
-    state.imageCache = Object.create(null);
-    state.imageEpoch += 1;
-    lastImageSignature = "";
+    resetArticleImageState();
+    imageRequestCache.clear();
     candidatesElement.replaceChildren();
     resultElement.replaceChildren();
     resultElement.hidden = true;
@@ -1735,3 +1710,4 @@
   tagStateMessage();
   updateControls();
 })();
+

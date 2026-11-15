@@ -28,37 +28,46 @@
     </header>
     <div id="offline-banner" class="offline-banner" role="status" hidden>当前离线：可以打开应用界面，热点搜索和文章生成仍需网络连接。</div>
     <main id="top" class="layout">
-      <section class="intro" data-mobile-stage="0">
+      <nav class="step-nav" aria-label="学习步骤">
+        <button type="button" data-step-button="0" aria-current="step"><span class="step-num">01</span><span class="step-name">准备</span></button>
+        <button type="button" data-step-button="1"><span class="step-num">02</span><span class="step-name">选热点</span></button>
+        <button type="button" data-step-button="2"><span class="step-num">03</span><span class="step-name">阅读</span></button>
+        <button type="button" data-step-button="3"><span class="step-num">04</span><span class="step-name">练习</span></button>
+      </nav>
+      <form id="lesson-form" novalidate>
+        <div class="wizard-pane" data-wizard-pane="0">
+<section class="intro">
         <p class="eyebrow">英语阅读练习</p>
         <h1>让今天的词，<br />读进真实世界。</h1>
-        <p class="intro-copy">粘贴正在学习的词汇，挑一条近期热点，生成一篇有出处的英语短文和练习。</p>
+        <p id="intro-copy" class="intro-copy">粘贴正在学习的词汇，挑一条近期热点，生成一篇有出处的英语短文和练习。</p>
+        <div class="mode-switch" role="radiogroup" aria-label="学习模式">
+          <label class="radio-card"><input type="radio" name="mode" value="news" checked /><span><b>新闻热读</b><small>热点短文、5 道练习与来源配图</small></span></label>
+          <label class="radio-card"><input type="radio" name="mode" value="novel" /><span><b>小说精读</b><small>把章节改写成英文学习版，不做题、不配图</small></span></label>
+        </div>
       </section>
-      <nav class="stage-nav" aria-label="学习阶段">
-        <button type="button" data-stage-button="0" aria-pressed="true"><span>01</span>准备</button>
-        <button type="button" data-stage-button="1" aria-pressed="false"><span>02</span>选热点</button>
-        <button type="button" data-stage-button="2" aria-pressed="false"><span>03</span>阅读与练习</button>
-      </nav>
-      <p class="send-scope" role="note">发送范围：热点搜索只发送标签、内容范围和最近 7 天给 DeepSeek Search；点「用当前位置」时，坐标只发给浏览器定位服务与 BigDataCloud 换取城市名，页面不保存坐标；候选中文翻译发送候选标题与摘要；生成时把目标词、所选热点资料和写作要求发送给 DeepSeek Chat。生成文章后会把所选来源文章的链接发给 microlink.io，用于取该文章的一张配图；不发送词汇、密钥、文章内容或做题答案。费用由你的账户承担，密钥只在本页会话内存中使用。</p>
-      <section class="notice" data-mobile-stage="0" aria-label="隐私与费用说明">
-        <strong>发送前请知悉</strong>
-        <p>本次试用仅使用 DeepSeek Search 搜索和 DeepSeek Chat Completions 生成。搜索按你选择的 1–5 个热点标签进行，只发送标签、内容范围和最近 7 天，不发送你输入的词汇；候选中文翻译开启时，会把候选的标题与摘要发给 DeepSeek。费用由你自己的 DeepSeek 账户承担。生成文章后会把所选来源文章的链接发给 microlink.io，用于取该文章的一张配图；不发送词汇、密钥、文章内容或做题答案。密钥只保存在当前页面内存中，但页面脚本和开发者工具可以访问它；刷新页面会清除本页数据。</p>
-        <label class="consent-row"><input id="consent" type="checkbox" /><span>我已了解数据发送对象和费用由本人承担。</span></label>
-      </section>
-      <section class="panel connection-panel" aria-labelledby="connection-heading">
+      <details class="scope-details">
+        <summary>发送范围与费用（点开查看）</summary>
+        <div class="scope-body">
+          <p class="send-scope" role="note">发送范围：热点搜索只发送标签、内容范围和最近 7 天给 DeepSeek Search；点「用当前位置」时，坐标只发给浏览器定位服务与 BigDataCloud 换取城市名，页面不保存坐标；候选中文翻译发送候选标题与摘要；生成时把目标词、所选热点资料和写作要求发送给 DeepSeek Chat。生成文章后会把所选来源文章的链接发给 microlink.io，用于取该文章的一张配图；不发送词汇、密钥、文章内容或做题答案。费用由你的账户承担，密钥只在本页会话内存中使用。小说精读模式下：书名与章节名会发给 DeepSeek Search 查找候选，章节链接会发给 DeepSeek Fetch 取回正文，章节正文与写作要求会发给 DeepSeek Chat 生成学习版；小说模式不请求 microlink，也不把词汇发给 Search 或 Fetch。</p>
+          <strong>发送前请知悉</strong>
+          <p>本次试用仅使用 DeepSeek Search 搜索和 DeepSeek Chat Completions 生成。搜索按你选择的 1–5 个热点标签进行，只发送标签、内容范围和最近 7 天，不发送你输入的词汇；小说精读的章节查找只发送书名与章节名，取回正文只发送章节链接，章节正文仅发送给 DeepSeek Chat 用于生成学习版；候选中文翻译开启时，会把候选的标题与摘要发给 DeepSeek。费用由你自己的 DeepSeek 账户承担。生成文章后会把所选来源文章的链接发给 microlink.io，用于取该文章的一张配图；不发送词汇、密钥、文章内容或做题答案。密钥只保存在当前页面内存中，但页面脚本和开发者工具可以访问它；刷新页面会清除本页数据。</p>
+        </div>
+      </details>
+      <label class="consent-row"><input id="consent" type="checkbox" /><span>我已了解数据发送对象和费用由本人承担。</span></label>
+<section class="panel connection-panel" aria-labelledby="connection-heading">
         <div class="panel-heading"><div><span class="step-index">连接</span><h2 id="connection-heading">连接设置</h2></div><span class="helper">仅保存在当前页面内存</span></div>
         <label class="field-label" for="api-key">DeepSeek API Key</label>
         <input id="api-key" type="password" inputmode="text" autocomplete="off" spellcheck="false" placeholder="在本机页面输入个人密钥" />
         <p class="field-hint">搜索和生成都用这一个密钥，只需填一次。刷新或清空本页后会清除。</p>
       </section>
-      <form id="lesson-form" novalidate>
-        <section class="panel" data-mobile-stage="0" aria-labelledby="words-heading">
+<section class="panel" data-mobile-stage="0" aria-labelledby="words-heading">
           <div class="panel-heading"><div><span class="step-index">01</span><h2 id="words-heading">今天要复习的词</h2></div><span class="helper">一行一个，不限个数，多余的留到下次</span></div>
           <label class="field-label" for="words">学习 / 复习词汇</label>
           <textarea id="words" name="words" rows="4" placeholder="curious&#10;harvest&#10;resilient" autocomplete="off"></textarea>
           <div class="field-row"><span id="word-count" class="helper">0 个词</span><span class="helper">重复词会自动合并<button id="restore-words" class="text-button" type="button" hidden>恢复上次移除的词</button></span></div>
         </section>
-        <section class="panel" data-mobile-stage="1" aria-labelledby="search-heading">
-          <div class="panel-heading"><div><span class="step-index">02</span><h2 id="search-heading">找一条近期热点</h2></div><span class="helper">英语来源 · 最近 7 天</span></div>
+<section id="news-tag-panel" class="panel" aria-labelledby="tag-heading">
+          <div class="panel-heading"><div><span class="step-index">01</span><h2 id="tag-heading">热点标签与范围</h2></div><span class="helper">英语来源 · 最近 7 天</span></div>
                     <label class="field-label" for="topic-tag">热点标签（1–5 个）</label>
           <div class="tag-input-row">
             <input id="topic-tag" type="text" autocomplete="off" spellcheck="false" placeholder="例如 artificial intelligence" />
@@ -75,15 +84,56 @@
             <div id="region-city-field" hidden><label class="field-label" for="region-city">城市或地区名称</label><input id="region-city" type="text" autocomplete="off" spellcheck="false" placeholder="例如 Hangzhou" /><p class="field-hint">会随搜索一并发给 DeepSeek Search；留空则不能搜索。建议填英文名称，命中率更高。也可以点「用当前位置」自动填入。</p><p id="locate-state" class="field-hint" role="status" aria-live="polite"></p></div>
           </div>
           <label class="toggle-row"><input id="candidate-translation" type="checkbox" /><span><b>显示候选中文对照</b><small>默认关闭。打开后搜索完会一次性翻译最多 5 条候选的标题与摘要，多一次请求和费用。</small></span></label>
-          <div class="provider-config search-config">
+                    </section>
+          <div class="step-actions">
+            <button id="to-topics" class="button primary" type="button" disabled aria-disabled="true">下一步：找热点</button>
+            <span id="step-0-status" class="step-status" role="status" aria-live="polite">先输入至少 1 个词</span>
+          </div>
+        </div>
+        <div class="wizard-pane" data-wizard-pane="1" hidden>
+<section id="novel-source-panel" class="panel" aria-labelledby="novel-source-heading" hidden>
+  <div class="panel-heading"><div><span class="step-index">02</span><h2 id="novel-source-heading">选一个章节</h2></div><span class="helper">粘贴、上传或自动获取</span></div>
+  <label class="field-label" for="novel-text">章节正文</label>
+  <textarea id="novel-text" rows="10" placeholder="粘贴小说章节正文（中文或英文均可）；上限 15,000 字符，只保存在当前页面内存。"></textarea>
+  <div class="field-row"><span id="novel-char-count" class="helper">0 / 15,000 字符</span><button id="novel-clear" class="text-button" type="button">清空章节</button></div>
+  <p id="novel-char-hint" class="field-hint" role="status" aria-live="polite"></p>
+  <label class="field-label" for="novel-file">上传 .txt</label>
+  <input id="novel-file" class="file-input" type="file" accept=".txt,text/plain" />
+  <details class="novel-fetch">
+    <summary>自动获取章节（查找 1 次 Search，取回 1 次 Fetch）</summary>
+    <div class="novel-fetch-body">
+      <p class="field-hint">查找与取回均为独立计费请求，费用由你的 DeepSeek 账户承担；失败不自动重试。书名与章节名由你填写，不会从抓取页面自动推断。</p>
+      <div class="field-grid">
+        <div><label class="field-label" for="novel-book">书名</label><input id="novel-book" type="text" autocomplete="off" placeholder="例如 活着" /></div>
+        <div><label class="field-label" for="novel-chapter">章节名</label><input id="novel-chapter" type="text" autocomplete="off" placeholder="例如 第三章" /></div>
+      </div>
+      <div class="button-row"><button id="novel-search" class="button secondary" type="button">查找章节</button></div>
+      <div id="novel-candidates" class="candidate-list" aria-live="polite"></div>
+      <div class="button-row"><button id="novel-fetch" class="button secondary" type="button" disabled>取回正文</button></div>
+      <label class="field-label" for="novel-url">直接粘贴章节链接</label>
+      <input id="novel-url" type="url" autocomplete="off" spellcheck="false" placeholder="https://example.com/chapter" />
+      <div class="button-row"><button id="novel-fetch-url" class="button secondary" type="button">取回链接正文</button></div>
+    </div>
+  </details>
+  <p id="novel-source-state" class="inline-state" role="status" aria-live="polite"></p>
+</section>
+<section id="news-search-panel" class="panel" aria-labelledby="search-heading">
+            <div class="panel-heading"><div><span class="step-index">02</span><h2 id="search-heading">找一条近期热点</h2></div><span class="helper">按标签搜索 · 最多 5 条候选</span></div>
+            <div class="provider-config search-config">
             <div class="config-title"><div><strong>独立搜索服务</strong><span class="tag success-tag">本机桩数据通过</span></div><p>DeepSeek Search。搜索只发送标签、内容范围和最近 7 天范围，不会把词汇放进搜索请求。</p></div>
             <p class="static-key-note">将使用上方填写的密钥。</p>
           </div>
           <div class="button-row"><button id="search-button" class="button secondary" type="button" disabled>搜索近期热点</button><span id="tag-state" class="inline-state error" role="status" aria-live="polite">先填一个标签</span><span id="search-state" class="inline-state" role="status" aria-live="polite"></span></div>
           <div id="candidate-list" class="candidate-list" aria-live="polite"></div>
         </section>
-        <section class="panel" data-mobile-stage="1" aria-labelledby="generation-heading">
-          <div class="panel-heading"><div><span class="step-index">03</span><h2 id="generation-heading">生成阅读与练习</h2></div><span class="helper">候选确认后只发送一次生成请求</span></div>
+          <div class="step-actions">
+            <button id="to-reading" class="button primary" type="button" disabled aria-disabled="true">下一步：生成文章</button>
+            <span id="step-1-status" class="step-status" role="status" aria-live="polite">先选中一条热点</span>
+          </div>
+        </div>
+        <div class="wizard-pane" data-wizard-pane="2" hidden>
+<section class="panel" data-mobile-stage="1" aria-labelledby="generation-heading">
+          <div class="panel-heading"><div><span class="step-index">03</span><h2 id="generation-heading">生成阅读与练习</h2></div><span id="generation-helper" class="helper">候选确认后只发送一次生成请求</span></div>
           <div class="provider-config">
             <div class="config-title"><div><strong>文章生成模型</strong><span class="tag success-tag">DeepSeek Chat Completions · 本机桩数据通过</span></div><p>其余服务商保留在配置列表中，但本次试用会禁用，须完成独立验证后再开放。</p></div>
             <div class="field-grid">
@@ -95,29 +145,49 @@
             <p class="field-hint">本次试用固定使用 DeepSeek 官方 HTTPS 接口。不得在地址中加入密钥或查询参数。</p>
             <p class="static-key-note">将使用上方填写的密钥。</p>
           </div>
-                    <div class="field-grid preferences">
+                    <details class="param-details" id="param-details">
+              <summary id="param-summary">文章参数：B1 · 约 140 词 · 正常密度 · 5 种题型</summary>
+              <div class="param-body">
+            <div class="field-grid preferences">
             <div><label class="field-label" for="level">英语难度</label><select id="level"><option value="A1">A1 · 入门</option><option value="A2">A2 · 基础</option><option value="B1" selected>B1 · 中级</option><option value="B2">B2 · 中高级</option><option value="C1">C1 · 高级</option><option value="C2">C2 · 精通</option></select></div>
-            <div><label class="field-label" for="length">文章长度</label><select id="length"><option value="100">约 100 词</option><option value="140" selected>约 140 词</option><option value="180">约 180 词</option><option value="220">约 220 词</option><option value="260">约 260 词</option><option value="300">约 300 词</option><option value="340">约 340 词</option></select></div>
-            <div><label class="field-label" for="density">目标词密度</label><select id="density"><option value="sparse">稀疏</option><option value="normal" selected>正常</option><option value="dense">密集</option></select></div>
+            <div id="news-length-field"><label class="field-label" for="length">文章长度</label><select id="length"><option value="100">约 100 词</option><option value="140" selected>约 140 词</option><option value="180">约 180 词</option><option value="220">约 220 词</option><option value="260">约 260 词</option><option value="300">约 300 词</option><option value="340">约 340 词</option></select></div>
+            <div id="news-density-field"><label class="field-label" for="density">目标词密度</label><select id="density"><option value="sparse">稀疏</option><option value="normal" selected>正常</option><option value="dense">密集</option></select></div>
+            <div id="novel-length-field" hidden><label class="field-label" for="novel-length">文章长度</label><select id="novel-length"><option value="300">约 300 词</option><option value="450">约 450 词</option><option value="600" selected>约 600 词</option><option value="800">约 800 词</option><option value="1000">约 1000 词</option></select></div>
+            <div id="novel-density-field" hidden><label class="field-label" for="novel-density">每千词目标词数</label><input id="novel-density" type="range" min="6" max="32" step="2" value="20" /><output id="novel-density-value" class="helper" for="novel-density">每千词 20 个</output></div>
           </div>
-          <div class="target-preview" role="status" aria-live="polite">
+          <div id="news-target-preview" class="target-preview" role="status" aria-live="polite">
             <p class="field-label">目标词预览</p>
             <p id="target-preview-count">预计使用 0 个目标词</p>
             <p id="target-preview-words" class="helper">先在上方粘贴词汇。</p>
           </div>
-          <fieldset class="type-fieldset">
+          <div id="novel-target-preview" class="target-preview" hidden role="status" aria-live="polite">
+            <p class="field-label">目标词预览</p>
+            <p id="novel-target-count">预计使用 0 个目标词</p>
+            <p id="novel-target-words" class="helper">先在上方粘贴词汇。</p>
+          </div>
+          <fieldset id="type-fieldset" class="type-fieldset">
             <legend class="field-label">练习题型（选 2–5 种，固定 5 题，每种至少 1 道）</legend>
             <div id="question-types" class="type-grid"></div>
             <p id="type-hint" class="field-hint" role="status" aria-live="polite"></p>
           </fieldset>
 <label class="toggle-row"><input id="translation" type="checkbox" /><span><b>生成中文全文翻译</b><small>默认关闭，会增加发送内容和模型费用</small></span></label>
-          <div class="button-row"><button id="generate-button" class="button primary" type="button" disabled>先搜索并选择热点</button><span id="generation-state" class="inline-state" role="status" aria-live="polite"></span></div>
+          </div></details>
+            <div class="button-row"><button id="generate-button" class="button primary" type="button" disabled>先搜索并选择热点</button><span id="generation-state" class="inline-state" role="status" aria-live="polite"></span></div>
           <div id="generation-detail" class="generation-detail" hidden></div>
         </section>
+<section id="result" class="result-section" hidden aria-live="polite"></section>
+          <div id="reading-actions" class="step-actions">
+            <button id="to-quiz" class="button primary" type="button" disabled aria-disabled="true">下一步：开始练习</button>
+            <span id="step-2-status" class="step-status" role="status" aria-live="polite">请先生成文章</span>
+          </div>
+        </div>
       </form>
-      <section id="result" class="result-section" data-mobile-stage="2" hidden aria-live="polite"></section>
-      <footer class="footer"><span>不保存学习历史。关闭或刷新页面后，词汇、文章和密钥会清除。</span><button id="clear-button" class="text-button" type="button">清空本页</button></footer>
+      <div class="wizard-pane" data-wizard-pane="3" hidden>
+        <section id="result-quiz" class="quiz-section" aria-live="polite"></section>
+      </div>
+<footer class="footer"><span>正式版 v1.0 · 不保存学习历史。关闭或刷新页面后，词汇、文章和密钥会清除。</span><button id="clear-button" class="text-button" type="button">清空本页</button></footer>
     </main>
+
     <!-- 修订确认面板：替代浏览器原生确认框；默认隐藏，只有用户点击“确认发送修订”才发送请求。 -->
     <div id="revision-dialog" class="dialog-backdrop" hidden>
       <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="revision-dialog-title" aria-describedby="revision-dialog-desc">
@@ -125,7 +195,7 @@
         <h2 id="revision-dialog-title">确认发送修订请求</h2>
         <div id="revision-dialog-desc">
           <p>确认后会再次向 DeepSeek Chat 发送以下内容：</p>
-          <ul class="dialog-list">
+          <ul id="revision-dialog-scope" class="dialog-list">
             <li>本次未覆盖的漏词</li>
             <li>当前文章全文</li>
             <li>本次学习词汇</li>

@@ -108,6 +108,7 @@
         <div><label class="field-label" for="novel-chapter">章节名</label><input id="novel-chapter" type="text" autocomplete="off" placeholder="例如 第三章" /></div>
       </div>
       <div class="button-row"><button id="novel-search" class="button secondary" type="button">查找章节</button></div>
+      <p class="field-hint">取回失败请换一条候选；出版社、新闻、阅读类站点通常能取回，扫描件与 PDF 站点常返回 404。</p>
       <div id="novel-candidates" class="candidate-list" aria-live="polite"></div>
       <div class="button-row"><button id="novel-fetch" class="button secondary" type="button" disabled>取回正文</button></div>
       <label class="field-label" for="novel-url">直接粘贴章节链接</label>
@@ -115,6 +116,10 @@
       <div class="button-row"><button id="novel-fetch-url" class="button secondary" type="button">取回链接正文</button></div>
     </div>
   </details>
+  <section id="novel-fetch-preview" class="novel-preview" hidden aria-live="polite">
+    <p class="field-label">已取回正文预览（前 200 字符）· 请核对是否为章节正文</p>
+    <pre id="novel-fetch-preview-text" class="novel-preview-text"></pre>
+  </section>
   <p id="novel-source-state" class="inline-state" role="status" aria-live="polite"></p>
 </section>
 <section id="news-search-panel" class="panel" aria-labelledby="search-heading">
@@ -164,6 +169,7 @@
             <p class="field-label">目标词预览</p>
             <p id="novel-target-count">预计使用 0 个目标词</p>
             <p id="novel-target-words" class="helper">先在上方粘贴词汇。</p>
+            <p class="field-hint">目标词与章节题材差得太远时，覆盖率会偏低；建议词表与章节主题相关。</p>
           </div>
           <fieldset id="type-fieldset" class="type-fieldset">
             <legend class="field-label">练习题型（选 2–5 种，固定 5 题，每种至少 1 道）</legend>

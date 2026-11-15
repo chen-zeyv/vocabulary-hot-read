@@ -355,6 +355,7 @@
   // ===== 第 25 轮：小说精读 =====
   // 章节正文只保存在 state.novel.rawText（页面内存），不写任何浏览器存储。
   const NOVEL_TEXT_LIMIT = 15000;
+  const NOVEL_FETCH_RETRY_HINT = "换一条候选再试；出版社、新闻、阅读类站点通常能取回，扫描件与 PDF 站点常返回 404。";
 
   function novelChapterChars() {
     return Options.countChars(state.novel.rawText);
@@ -388,6 +389,22 @@
     }
     const text = $("#novel-text");
     if (text) text.setAttribute("aria-invalid", String(chars > NOVEL_TEXT_LIMIT));
+  }
+
+  function hideNovelFetchPreview() {
+    const box = $("#novel-fetch-preview");
+    const text = $("#novel-fetch-preview-text");
+    if (text) text.textContent = "";
+    if (box) box.hidden = true;
+  }
+
+  // 只显示前 200 个 Unicode 码点，避免把 emoji 的代理对切坏；始终用 textContent。
+  function showNovelFetchPreview(content) {
+    const box = $("#novel-fetch-preview");
+    const text = $("#novel-fetch-preview-text");
+    if (!box || !text) return;
+    text.textContent = Array.from(String(content || "")).slice(0, 200).join("");
+    box.hidden = false;
   }
 
   function updateNovelDensityLabel() {
@@ -575,7 +592,7 @@
       const content = payload?.content ?? payload?.data?.content;
       const title = payload?.title ?? payload?.data?.title;
       if (typeof content !== "string" || !content.trim()) {
-        setNovelStatus("取回失败：没有收到可用的章节正文。请换一个链接；本页不会自动重试。", "error");
+        setNovelStatus(`取回失败：没有收到可用的章节正文。${NOVEL_FETCH_RETRY_HINT} 本页不会自动重试。`, "error");
         return;
       }
       const chars = Options.countChars(content);
@@ -590,12 +607,13 @@
       if (text) text.value = content;
       if (state.generated) resetGeneratedContent();
       updateNovelCharCount();
+      showNovelFetchPreview(content);
       setNovelStatus(`已取回 ${chars.toLocaleString("en-US")} 字符，请删除导航、广告与目录文字后再生成`, "success");
       renderNovelSourcePanel();
       updateControls();
     } catch (error) {
       if (epoch !== sessionEpoch) return;
-      setNovelStatus(classifyError(error, error.response), "error");
+      setNovelStatus(`${classifyError(error, error.response)} ${NOVEL_FETCH_RETRY_HINT}`, "error");
     } finally {
       if (searchButtonElement) searchButtonElement.disabled = false;
       if (fetchButton) fetchButton.disabled = !(state.novel.selectedSource >= 0 && state.novel.searchResults[state.novel.selectedSource]);
@@ -608,6 +626,7 @@
     const next = text ? text.value : "";
     const changed = next !== state.novel.rawText;
     state.novel.rawText = next;
+    if (changed) hideNovelFetchPreview();
     updateNovelCharCount();
     if (changed && state.generated) {
       resetGeneratedContent();
@@ -674,6 +693,7 @@
     state.novel.searchResults = [];
     state.novel.selectedSource = -1;
     state.novel.fetchedTitle = "";
+    hideNovelFetchPreview();
     setNovelStatus("");
     renderNovelSourcePanel();
   }
@@ -2306,6 +2326,7 @@
     renderTargetPreview();
     tagStateMessage();
     setNovelStatus("");
+    hideNovelFetchPreview();
     applyModeUi();
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     updateControls();
@@ -2454,6 +2475,7 @@
     state.novel.rawText = "";
     state.novel.sourceUrl = "";
     state.novel.fetchedTitle = "";
+    hideNovelFetchPreview();
     if (state.generated) resetGeneratedContent();
     updateNovelCharCount();
     setNovelStatus("章节正文已清空；书名与章节名保留。");
@@ -2481,6 +2503,7 @@
       state.novel.sourceUrl = "";
       state.novel.fetchedTitle = "";
       $("#novel-text").value = content;
+      hideNovelFetchPreview();
       if (state.generated) resetGeneratedContent();
       updateNovelCharCount();
       setNovelStatus(`已读取 ${chars.toLocaleString("en-US")} 字符，请删除导航、广告与目录文字后再生成`, "success");

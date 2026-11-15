@@ -404,3 +404,8 @@ input[type="range"] { width:100%; min-height:32px; accent-color:var(--blue); }
 @media (min-width:1180px) {
   body[data-mode="novel"] .wizard-pane[data-wizard-pane="0"] { grid-template-columns:minmax(0,0.9fr) minmax(0,1fr); }
 }
+
+/* 第 27 轮：Fetch 成功后的原文预览 */
+.novel-preview { margin:12px 0 4px; padding:10px 12px; border:1px solid #d6e2ec; border-radius:9px; background:#f7fbfe; }
+.novel-preview .field-label { margin:0 0 6px; }
+.novel-preview-text { margin:0; max-height:180px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-family:inherit; font-size:13px; line-height:1.6; color:#3a4b5e; }

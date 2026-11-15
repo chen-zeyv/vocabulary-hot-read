@@ -467,6 +467,22 @@
     else if (data.translation != null && typeof data.translation !== "string") throw new Error("translation 字段不是字符串。");
     return result;
   }
+  // 取回内容质量判定：只按信号字符串判断，不看长度、不看站点白名单。
+  // 空值/非字符串一律 false；"summary" 单独出现不算，必须带 "## " 前缀。
+  function looksLikePageFurniture(text) {
+    if (typeof text !== "string") return false;
+    const source = text.trim().toLowerCase();
+    if (!source) return false;
+    return [
+      "hostname: page-component",
+      "render date:",
+      "total loading time:",
+      "published online by",
+      "## summary",
+      "hascontentissue",
+    ].some((signal) => source.includes(signal));
+  }
+
   return {
     countChars,
     TAG_MAX_LENGTH,
@@ -487,6 +503,7 @@
     computeNovelTargetCount,
     buildNovelPrompt,
     parseNovelResponse,
+    looksLikePageFurniture,
     DENSITIES,
     DENSITY_LABELS,
     TARGET_MATRIX,

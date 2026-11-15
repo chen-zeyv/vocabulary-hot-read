@@ -391,18 +391,26 @@
     if (text) text.setAttribute("aria-invalid", String(chars > NOVEL_TEXT_LIMIT));
   }
 
+  const NOVEL_PREVIEW_TITLE_NORMAL = "已取回正文预览（前 200 字符）· 请核对是否为章节正文";
+  const NOVEL_PREVIEW_TITLE_SUSPECT = "已取回内容预览（疑似摘要或页面框架，未写入正文）· 前 200 字符";
+
   function hideNovelFetchPreview() {
     const box = $("#novel-fetch-preview");
     const text = $("#novel-fetch-preview-text");
+    const title = $("#novel-fetch-preview-title");
     if (text) text.textContent = "";
+    if (title) title.textContent = NOVEL_PREVIEW_TITLE_NORMAL;
     if (box) box.hidden = true;
   }
 
   // 只显示前 200 个 Unicode 码点，避免把 emoji 的代理对切坏；始终用 textContent。
-  function showNovelFetchPreview(content) {
+  // suspect=true 时只切换同一个标题节点的文案，不新增第二套 DOM。
+  function showNovelFetchPreview(content, suspect = false) {
     const box = $("#novel-fetch-preview");
     const text = $("#novel-fetch-preview-text");
+    const title = $("#novel-fetch-preview-title");
     if (!box || !text) return;
+    if (title) title.textContent = suspect ? NOVEL_PREVIEW_TITLE_SUSPECT : NOVEL_PREVIEW_TITLE_NORMAL;
     text.textContent = Array.from(String(content || "")).slice(0, 200).join("");
     box.hidden = false;
   }
@@ -598,6 +606,11 @@
       const chars = Options.countChars(content);
       if (chars > NOVEL_TEXT_LIMIT) {
         setNovelStatus(`取回正文 ${chars.toLocaleString("en-US")} 字符，超过 15,000 字符上限；原正文未改动，请更换章节或自行删减后粘贴。`, "error");
+        return;
+      }
+      if (Options.looksLikePageFurniture(content)) {
+        showNovelFetchPreview(content, true);
+        setNovelStatus("取回内容疑似摘要或页面框架，不是章节正文；已保留原正文。请换一条候选，或直接粘贴章节正文。", "error");
         return;
       }
       state.novel.rawText = content;

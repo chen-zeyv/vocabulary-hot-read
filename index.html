@@ -181,6 +181,14 @@
             <div class="button-row"><button id="generate-button" class="button primary" type="button" disabled>先搜索并选择热点</button><span id="generation-state" class="inline-state" role="status" aria-live="polite"></span></div>
           <div id="generation-detail" class="generation-detail" hidden></div>
         </section>
+        <section id="novel-coverage-warning" class="result-panel coverage-alert" role="alert" hidden>
+          <p id="novel-coverage-message" class="coverage-alert-message"></p>
+          <div id="novel-strict-actions" class="button-row">
+            <button id="novel-strict-rewrite" class="button primary" type="button">强调用词重写一次（1 次请求）</button>
+            <span class="helper">会再计费一次；每章节最多一次，不占用确认修订机会。</span>
+          </div>
+          <p id="novel-strict-used" class="helper" hidden></p>
+        </section>
 <section id="result" class="result-section" hidden aria-live="polite"></section>
           <div id="reading-actions" class="step-actions">
             <button id="to-quiz" class="button primary" type="button" disabled aria-disabled="true">下一步：开始练习</button>

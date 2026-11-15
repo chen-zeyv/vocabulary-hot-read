@@ -409,3 +409,9 @@ input[type="range"] { width:100%; min-height:32px; accent-color:var(--blue); }
 .novel-preview { margin:12px 0 4px; padding:10px 12px; border:1px solid #d6e2ec; border-radius:9px; background:#f7fbfe; }
 .novel-preview .field-label { margin:0 0 6px; }
 .novel-preview-text { margin:0; max-height:180px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-family:inherit; font-size:13px; line-height:1.6; color:#3a4b5e; }
+
+/* 第 31 轮：覆盖率未达要求提示 */
+.coverage-alert { border-left:4px solid #b7791f; background:#fff8e8; }
+.coverage-alert-message { margin:0 0 10px; color:#7a4a06; font-weight:700; font-size:14px; }
+.coverage-alert .button-row { align-items:center; }
+#novel-strict-used { margin:0; color:#7a4a06; }

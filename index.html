@@ -7,7 +7,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="theme-color" content="#f4f7fb" />
-    <meta name="description" content="把当天词汇放进近期热点文章和练习中。" />
+    <meta name="description" content="把今天要背的单词，读进真实文章里。" />
+    <meta property="og:title" content="词汇热读" />
+    <meta property="og:description" content="把今天要背的单词，读进真实文章里。" />
+    <meta property="og:type" content="website" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" href="./icons/icon-apple-touch-180.png" />
@@ -50,7 +53,7 @@
         <div class="scope-body">
           <p class="send-scope" role="note">发送范围：热点搜索只发送标签、内容范围和最近 7 天给 DeepSeek Search；点「用当前位置」时，坐标只发给浏览器定位服务与 BigDataCloud 换取城市名，页面不保存坐标；候选中文翻译发送候选标题与摘要；生成时把目标词、所选热点资料和写作要求发送给 DeepSeek Chat。生成文章后会把所选来源文章的链接发给 microlink.io，用于取该文章的一张配图；不发送词汇、密钥、文章内容或做题答案。费用由你的账户承担，密钥只在本页会话内存中使用。小说精读模式下：书名与章节名会发给 DeepSeek Search 查找候选，章节链接会发给 DeepSeek Fetch 取回正文，章节正文与写作要求会发给 DeepSeek Chat 生成学习版；小说模式不请求 microlink，也不把词汇发给 Search 或 Fetch。</p>
           <strong>发送前请知悉</strong>
-          <p>本次试用仅使用 DeepSeek Search 搜索和 DeepSeek Chat Completions 生成。搜索按你选择的 1–5 个热点标签进行，只发送标签、内容范围和最近 7 天，不发送你输入的词汇；小说精读的章节查找只发送书名与章节名，取回正文只发送章节链接，章节正文仅发送给 DeepSeek Chat 用于生成学习版；候选中文翻译开启时，会把候选的标题与摘要发给 DeepSeek。费用由你自己的 DeepSeek 账户承担。生成文章后会把所选来源文章的链接发给 microlink.io，用于取该文章的一张配图；不发送词汇、密钥、文章内容或做题答案。密钥只保存在当前页面内存中，但页面脚本和开发者工具可以访问它；刷新页面会清除本页数据。</p>
+          <p>当前版本使用 DeepSeek Search 搜索和 DeepSeek Chat Completions 生成。搜索按你选择的 1–5 个热点标签进行，只发送标签、内容范围和最近 7 天，不发送你输入的词汇；小说精读的章节查找只发送书名与章节名，取回正文只发送章节链接，章节正文仅发送给 DeepSeek Chat 用于生成学习版；候选中文翻译开启时，会把候选的标题与摘要发给 DeepSeek。费用由你自己的 DeepSeek 账户承担。生成文章后会把所选来源文章的链接发给 microlink.io，用于取该文章的一张配图；不发送词汇、密钥、文章内容或做题答案。密钥只保存在当前页面内存中，但页面脚本和开发者工具可以访问它；刷新页面会清除本页数据。</p>
         </div>
       </details>
       <label class="consent-row"><input id="consent" type="checkbox" /><span>我已了解数据发送对象和费用由本人承担。</span></label>
@@ -125,7 +128,7 @@
 <section id="news-search-panel" class="panel" aria-labelledby="search-heading">
             <div class="panel-heading"><div><span class="step-index">02</span><h2 id="search-heading">找一条近期热点</h2></div><span class="helper">按标签搜索 · 最多 5 条候选</span></div>
             <div class="provider-config search-config">
-            <div class="config-title"><div><strong>独立搜索服务</strong><span class="tag success-tag">本机桩数据通过</span></div><p>DeepSeek Search。搜索只发送标签、内容范围和最近 7 天范围，不会把词汇放进搜索请求。</p></div>
+            <div class="config-title"><div><strong>独立搜索服务</strong><span class="tag success-tag">DeepSeek Search</span></div><p>DeepSeek Search。搜索只发送标签、内容范围和最近 7 天范围，不会把词汇放进搜索请求。</p></div>
             <p class="static-key-note">将使用上方填写的密钥。</p>
           </div>
           <div class="button-row"><button id="search-button" class="button secondary" type="button" disabled>搜索近期热点</button><span id="tag-state" class="inline-state error" role="status" aria-live="polite">先填一个标签</span><span id="search-state" class="inline-state" role="status" aria-live="polite"></span></div>
@@ -140,14 +143,14 @@
 <section class="panel" data-mobile-stage="1" aria-labelledby="generation-heading">
           <div class="panel-heading"><div><span class="step-index">03</span><h2 id="generation-heading">生成阅读与练习</h2></div><span id="generation-helper" class="helper">候选确认后只发送一次生成请求</span></div>
           <div class="provider-config">
-            <div class="config-title"><div><strong>文章生成模型</strong><span class="tag success-tag">DeepSeek Chat Completions · 本机桩数据通过</span></div><p>其余服务商保留在配置列表中，但本次试用会禁用，须完成独立验证后再开放。</p></div>
+            <div class="config-title"><div><strong>文章生成模型</strong><span class="tag success-tag">DeepSeek Chat Completions</span></div><p>其余服务商保留在配置列表中，但暂未开放，须完成独立验证后再开放。</p></div>
             <div class="field-grid">
-              <div><label class="field-label" for="provider">服务商 / 协议</label><select id="provider"><option value="deepseek">DeepSeek · Chat Completions</option><option value="qwen" disabled>阿里云百炼 · 未验证，暂不用于本次试用</option><option value="doubao" disabled>火山引擎 / 豆包 · 未验证，暂不用于本次试用</option><option value="hunyuan" disabled>腾讯混元 / TokenHub · 未验证，暂不用于本次试用</option><option value="baidu" disabled>百度千帆 · 未验证，暂不用于本次试用</option><option value="glm" disabled>智谱 GLM · 未验证，暂不用于本次试用</option><option value="moonshot" disabled>Moonshot / Kimi · 未验证，暂不用于本次试用</option><option value="minimax" disabled>MiniMax · 未验证，暂不用于本次试用</option><option value="custom" disabled>自定义接口 · 未验证，暂不用于本次试用</option></select></div>
+              <div><label class="field-label" for="provider">服务商 / 协议</label><select id="provider"><option value="deepseek">DeepSeek · Chat Completions</option><option value="qwen" disabled>阿里云百炼 · 暂未开放</option><option value="doubao" disabled>火山引擎 / 豆包 · 暂未开放</option><option value="hunyuan" disabled>腾讯混元 / TokenHub · 暂未开放</option><option value="baidu" disabled>百度千帆 · 暂未开放</option><option value="glm" disabled>智谱 GLM · 暂未开放</option><option value="moonshot" disabled>Moonshot / Kimi · 暂未开放</option><option value="minimax" disabled>MiniMax · 暂未开放</option><option value="custom" disabled>自定义接口 · 暂未开放</option></select></div>
               <div><label class="field-label" for="model">模型 ID</label><input id="model" type="text" autocomplete="off" placeholder="例如 deepseek-flash" /></div>
             </div>
             <label class="field-label" for="endpoint">HTTPS API 地址</label>
             <input id="endpoint" type="url" autocomplete="off" spellcheck="false" placeholder="https://api.example.com/v1/chat/completions" />
-            <p class="field-hint">本次试用固定使用 DeepSeek 官方 HTTPS 接口。不得在地址中加入密钥或查询参数。</p>
+            <p class="field-hint">当前版本固定使用 DeepSeek 官方 HTTPS 接口。不得在地址中加入密钥或查询参数。</p>
             <p class="static-key-note">将使用上方填写的密钥。</p>
           </div>
                     <details class="param-details" id="param-details">
@@ -199,7 +202,14 @@
       <div class="wizard-pane" data-wizard-pane="3" hidden>
         <section id="result-quiz" class="quiz-section" aria-live="polite"></section>
       </div>
-<footer class="footer"><span>正式版 v1.0 · 不保存学习历史。关闭或刷新页面后，词汇、文章和密钥会清除。</span><button id="clear-button" class="text-button" type="button">清空本页</button></footer>
+      <section class="about" aria-labelledby="about-title">
+        <h2 id="about-title">关于</h2>
+        <p>这是什么：把当天要学的词写进一篇可读的英文文章或学习版章节里，读完再做几道题。</p>
+        <p>数据去哪：请求直接从浏览器发往 DeepSeek；取源文章配图时会把来源链接发给 microlink.io。站点本身没有服务器，不留存任何内容。</p>
+        <p>费用：由你自己的 DeepSeek 账户承担，按官方定价计费。</p>
+        <p>反馈：遇到问题请到项目仓库提交 issue（链接 https://github.com/chen-zeyv/vocabulary-hot-read/issues）。</p>
+      </section>
+      <footer class="footer"><span>词汇热读 v1.0.0 · 不保存学习历史。关闭或刷新页面后，词汇、文章和密钥会清除。</span><button id="clear-button" class="text-button" type="button">清空本页</button></footer>
     </main>
 
     <!-- 修订确认面板：替代浏览器原生确认框；默认隐藏，只有用户点击“确认发送修订”才发送请求。 -->

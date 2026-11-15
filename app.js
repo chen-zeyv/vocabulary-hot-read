@@ -1569,7 +1569,7 @@
     }
     const provider = getProvider();
     if (provider !== "deepseek") {
-      setState("#generation-state", "本次试用仅开放 DeepSeek Chat Completions；其他服务商未验证，暂不可用。", "error");
+      setState("#generation-state", "当前版本仅支持 DeepSeek Chat Completions；其他服务商暂未开放。", "error");
       return;
     }
     let endpoint;
@@ -1580,7 +1580,7 @@
       return;
     }
     if (endpoint !== "https://api.deepseek.com/chat/completions") {
-      setState("#generation-state", "本次试用只允许 DeepSeek 官方 Chat Completions 地址。", "error");
+      setState("#generation-state", "当前版本仅支持 DeepSeek 官方 Chat Completions 地址。", "error");
       return;
     }
     const model = $("#model").value.trim();
@@ -1749,7 +1749,7 @@
       : getTargetWords(getWords());
     const provider = getProvider();
     if (provider !== "deepseek") {
-      setState("#generation-state", "本次试用仅开放 DeepSeek Chat Completions；其他服务商未验证，暂不可用。", "error");
+      setState("#generation-state", "当前版本仅支持 DeepSeek Chat Completions；其他服务商暂未开放。", "error");
       return;
     }
     let endpoint;
@@ -1775,7 +1775,7 @@
       return;
     }
     if (endpoint !== "https://api.deepseek.com/chat/completions") {
-      setState("#generation-state", "本次试用只允许 DeepSeek 官方 Chat Completions 地址。", "error");
+      setState("#generation-state", "当前版本仅支持 DeepSeek 官方 Chat Completions 地址。", "error");
       return;
     }
     if (provider === "minimax" && !endpoint.endsWith("/v1/text/chatcompletion_v2")) {

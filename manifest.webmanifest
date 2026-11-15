@@ -2,7 +2,7 @@
   "id": "./",
   "name": "词汇热读",
   "short_name": "词汇热读",
-  "description": "把当天词汇放进近期热点文章和练习中。",
+  "description": "把今天要背的单词，读进真实文章里。",
   "lang": "zh-CN",
   "start_url": "./",
   "scope": "./",

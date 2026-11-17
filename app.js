@@ -48,6 +48,7 @@
       selectedSource: -1,
       status: "",
       coverageShort: false,
+      incompleteReason: "",
       strictRewriteUsed: false,
       strictRewritePending: false,
     },
@@ -238,7 +239,7 @@
       if (step === 2) {
         const chars = novelChapterChars();
         if (!chars) return "先粘贴或取回章节正文";
-        if (chars > NOVEL_TEXT_LIMIT) return "章节正文超过 15,000 字符，请删减";
+        if (chars > NOVEL_TEXT_LIMIT) return "章节正文超过 30,000 字符，请删减";
         return "";
       }
       return "";
@@ -257,6 +258,14 @@
     return Number(document.body.dataset.wizardStep || 0);
   }
 
+  // 整章档（≥1500 词）才显示 token 提示；不做金额估算。
+  function syncNovelSizeHint() {
+    const hint = $("#novel-size-hint");
+    if (!hint) return;
+    const length = Number($("#novel-length") && $("#novel-length").value) || 600;
+    hint.hidden = !(state.mode === "novel" && length >= 1500);
+  }
+
   function renderParamSummary() {
     const summary = $("#param-summary");
     if (!summary) return;
@@ -266,6 +275,7 @@
       const density = Number($("#novel-density").value) || Options.NOVEL_DENSITY.default;
       const count = Options.computeNovelTargetCount(getWords().length, length, density);
       summary.textContent = `小说参数：${level} · 约 ${length} 词 · 每千词 ${density} 个目标词 · 预计 ${count} 个目标词（点开调整）`;
+      syncNovelSizeHint();
       return;
     }
     const pick = (selector) => {
@@ -357,7 +367,7 @@
 
   // ===== 第 25 轮：小说精读 =====
   // 章节正文只保存在 state.novel.rawText（页面内存），不写任何浏览器存储。
-  const NOVEL_TEXT_LIMIT = 15000;
+  const NOVEL_TEXT_LIMIT = 30000;
   const NOVEL_FETCH_RETRY_HINT = "换一条候选再试；出版社、新闻、阅读类站点通常能取回，扫描件与 PDF 站点常返回 404。";
 
   function novelChapterChars() {
@@ -384,10 +394,10 @@
   function updateNovelCharCount() {
     const chars = novelChapterChars();
     const count = $("#novel-char-count");
-    if (count) count.textContent = `${chars.toLocaleString("en-US")} / 15,000 字符`;
+    if (count) count.textContent = `${chars.toLocaleString("en-US")} / 30,000 字符`;
     const hint = $("#novel-char-hint");
     if (hint) {
-      hint.textContent = chars > NOVEL_TEXT_LIMIT ? "已超过 15,000 字符上限。页面不会截断，请删减后再生成。" : "";
+      hint.textContent = chars > NOVEL_TEXT_LIMIT ? "已超过 30,000 字符上限。页面不会截断，请删减后再生成。" : "";
       hint.className = `field-hint${chars > NOVEL_TEXT_LIMIT ? " error-hint" : ""}`;
     }
     const text = $("#novel-text");
@@ -426,9 +436,17 @@
     const button = $("#novel-strict-rewrite");
     const used = $("#novel-strict-used");
     if (!box || !message) return;
-    if (state.mode !== "novel" || !state.generated || !state.novel.coverageShort) {
+    const incomplete = state.novel.incompleteReason || "";
+    if (state.mode !== "novel" || !state.generated || (!state.novel.coverageShort && !incomplete)) {
       box.hidden = true;
       if (actions) actions.hidden = false;
+      if (used) used.hidden = true;
+      return;
+    }
+    if (!state.novel.coverageShort) {
+      message.textContent = incomplete;
+      box.hidden = false;
+      if (actions) actions.hidden = true;
       if (used) used.hidden = true;
       return;
     }
@@ -603,7 +621,7 @@
   }
 
   // 取回正文：1 次 Fetch；兼容 payload.content 与 payload.data.content 及同名标题字段。
-  // 超过 15,000 字符时拒绝且保持原正文不变；失败不自动重试。
+  // 超过 30,000 字符时拒绝且保持原正文不变；失败不自动重试。
   async function fetchChapterText(url, label = "章节链接") {
     const target = String(url || "").trim();
     if (!navigator.onLine) {
@@ -643,7 +661,7 @@
       }
       const chars = Options.countChars(content);
       if (chars > NOVEL_TEXT_LIMIT) {
-        setNovelStatus(`取回正文 ${chars.toLocaleString("en-US")} 字符，超过 15,000 字符上限；原正文未改动，请更换章节或自行删减后粘贴。`, "error");
+        setNovelStatus(`取回正文 ${chars.toLocaleString("en-US")} 字符，超过 30,000 字符上限；原正文未改动，请更换章节或自行删减后粘贴。`, "error");
         return;
       }
       if (Options.looksLikePageFurniture(content)) {
@@ -836,6 +854,7 @@
     state.generationAttempted = false;
     state.revisionUsed = false;
     state.novel.coverageShort = false;
+    state.novel.incompleteReason = "";
     state.novel.strictRewriteUsed = false;
     state.novel.strictRewritePending = false;
     state.incompleteAccepted = false;
@@ -1615,7 +1634,7 @@
         return;
       }
       if (chars > NOVEL_TEXT_LIMIT) {
-        setState("#generation-state", "章节正文超过 15,000 字符，请删减后再生成；页面不会截断。", "error");
+        setState("#generation-state", "章节正文超过 30,000 字符，请删减后再生成；页面不会截断。", "error");
         return;
       }
     }
@@ -1669,6 +1688,13 @@
         const required = Options.computeNovelRequiredCoverage(total);
         const covered = Math.max(0, total - missing.length);
         state.novel.coverageShort = covered < required;
+        // 整章档：字数明显不足或返回被截断时只提示，不自动重试。
+        const articleWords = String(state.generated.article || "").split(/\\s+/).filter(Boolean).length;
+        const wantWords = Number($("#novel-length").value) || 600;
+        const truncated = Array.isArray(payload && payload.choices) && payload.choices.some((c) => c && c.finish_reason === "length");
+        state.novel.incompleteReason = (articleWords < wantWords * 0.6 || truncated)
+          ? `输出可能不完整（实际 ${articleWords} 词 / 目标 ${wantWords} 词）`
+          : "";
         state.incompleteAccepted = false;
         state.generationError = state.novel.coverageShort
           ? ""
@@ -2538,6 +2564,7 @@
     state.novel.selectedSource = -1;
     state.novel.status = "";
     state.novel.coverageShort = false;
+    state.novel.incompleteReason = "";
     state.novel.strictRewriteUsed = false;
     state.novel.strictRewritePending = false;
     state.candidateTranslations = {};
@@ -2753,6 +2780,32 @@
   $("#novel-fetch-url").addEventListener("click", () => {
     fetchChapterText($("#novel-url").value, "链接");
   });
+  // 长度档统一由 Options.NOVEL_LENGTH_OPTIONS 生成；1500 以上标「整章」。
+  (function initNovelLengthOptions() {
+    const select = $("#novel-length");
+    if (!select || !Array.isArray(Options.NOVEL_LENGTH_OPTIONS)) return;
+    const current = Number(select.value) || 600;
+    select.replaceChildren();
+    Options.NOVEL_LENGTH_OPTIONS.forEach((value) => {
+      const option = document.createElement("option");
+      option.value = String(value);
+      option.textContent = value >= 1500 ? `${value} 词 · 整章` : `约 ${value} 词`;
+      select.appendChild(option);
+    });
+    select.value = Options.NOVEL_LENGTH_OPTIONS.indexOf(current) >= 0 ? String(current) : "600";
+  })();
+  // 整章档 token 提示：生成按钮上方一行，仅该档显示。
+  (function initNovelSizeHint() {
+    const button = $("#generate-button");
+    if (!button || $("#novel-size-hint")) return;
+    const hint = document.createElement("p");
+    hint.id = "novel-size-hint";
+    hint.className = "helper";
+    hint.hidden = true;
+    hint.textContent = "整章生成约消耗 2–4 倍 token";
+    const row = button.closest(".button-row") || button;
+    row.insertAdjacentElement("beforebegin", hint);
+  })();
   $("#novel-length").addEventListener("change", () => handleNovelCriteriaChange("长度"));
   $("#novel-density").addEventListener("input", () => {
     updateNovelDensityLabel();

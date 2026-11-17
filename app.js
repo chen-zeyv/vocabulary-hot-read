@@ -806,17 +806,27 @@
     })[char]);
   }
 
-  function getWords() {
+  // 统一切词：非字母一律当分隔符，只接受 1-24 个字母/撇号/连字符、且以字母开头的 token。
+  // 被拒片段单独返回，只用于界面计数，不进词表、不进任何请求。
+  function parseWordList(text) {
+    const raw = String(text || "").split(/[^A-Za-z'’\-\u3400-\u9FFF]+/).filter(Boolean);
     const seen = new Set();
-    return wordsInput.value
-      .split(/[\n,，;；\t]+/)
-      .map((word) => word.trim().replace(/^[\s•*-]+|[\s•*-]+$/g, ""))
-      .filter((word) => {
-        const key = word.toLocaleLowerCase();
-        if (!word || seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
+    const words = [];
+    const rejected = [];
+    raw.forEach((token) => {
+      const trimmed = token.replace(/^['’-]+|['’-]+$/g, "");
+      if (!trimmed) return;
+      if (!/^[A-Za-z][A-Za-z'’-]{0,23}$/.test(trimmed)) { rejected.push(trimmed); return; }
+      const key = trimmed.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      words.push(trimmed);
+    });
+    return { words, rejected };
+  }
+
+  function getWords() {
+    return parseWordList(wordsInput.value).words;
   }
 
   function resetGeneratedContent() {
@@ -850,9 +860,11 @@
   }
 
   function updateWordCount() {
-    const words = getWords();
+    const parsed = parseWordList(wordsInput.value);
+    const words = parsed.words;
+    const ignored = parsed.rejected.length;
     const consumed = state.lastConsumedWords ? state.lastConsumedWords.length : 0;
-    $("#word-count").textContent = `${words.length} 个词${consumed ? ` · 上次已用 ${consumed} 个` : ""}`;
+    $("#word-count").textContent = `${words.length} 个词${ignored ? ` · 忽略 ${ignored} 段非单词内容` : ""}${consumed ? ` · 上次已用 ${consumed} 个` : ""}`;
     renderTargetPreview();
     if (!suppressWordReset && (state.candidates.length || state.generated)) resetGeneratedContent();
     updateControls();
@@ -2436,23 +2448,15 @@
       .map((word) => String(word || "").replace(/^[\s•*-]+|[\s•*-]+$/g, "").trim().toLocaleLowerCase())
       .filter(Boolean));
     if (!usedKeys.size) return;
+    const parsed = parseWordList(wordsInput.value);
     const removed = [];
-    const keptLines = [];
-    wordsInput.value.split("\n").forEach((line) => {
-      const parts = line.split(/[,，;；\t]+/).map((part) => part.trim()).filter(Boolean);
-      if (!parts.length) return;
-      const survivors = parts.filter((part) => {
-        const key = part.replace(/^[\s•*-]+|[\s•*-]+$/g, "").toLocaleLowerCase();
-        if (usedKeys.has(key)) {
-          removed.push(part);
-          return false;
-        }
-        return true;
-      });
-      if (survivors.length) keptLines.push(survivors.join(", "));
+    const kept = [];
+    parsed.words.forEach((word) => {
+      if (usedKeys.has(word.toLocaleLowerCase())) removed.push(word);
+      else kept.push(word);
     });
     if (!removed.length) return;
-    wordsInput.value = keptLines.join("\n");
+    wordsInput.value = kept.join("\n");
     state.lastConsumedWords = removed;
     suppressWordReset = true;
     try {

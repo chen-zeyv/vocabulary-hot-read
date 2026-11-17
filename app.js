@@ -38,6 +38,10 @@
     lastConsumedWords: [],
     articleImage: { url: "", pageUrl: "", width: null, height: null, status: "idle" },
     mode: "news",
+    lookupCount: 0,
+    lookupCache: new Map(),
+    lookupFailed: new Set(),
+    lookupPending: new Set(),
     novel: {
       rawText: "",
       bookTitle: "",
@@ -54,6 +58,28 @@
     },
   };
   const $ = (selector) => document.querySelector(selector);
+  // 目标词有效性：glossZh 非空且不是「模型未提供词义」才算有效词。
+  const INVALID_GLOSS_TEXT = "模型未提供词义";
+  function normalizeGlossText(value) {
+    const text = typeof value === "string" ? value.trim() : "";
+    return text && text !== INVALID_GLOSS_TEXT ? text : null;
+  }
+  function normalizeTargetEntries(list) {
+    return (Array.isArray(list) ? list : []).map((item) => {
+      if (typeof item === "string") {
+        const word = item.trim();
+        return word ? { word, glossZh: null, valid: false } : null;
+      }
+      if (!item || typeof item !== "object") return null;
+      const word = typeof item.word === "string" ? item.word.trim() : "";
+      if (!word) return null;
+      const glossZh = normalizeGlossText(item.glossZh);
+      return { ...item, word, glossZh, valid: Boolean(glossZh) };
+    }).filter(Boolean);
+  }
+  function isValidTargetWord(item) {
+    return Boolean(item) && item.valid !== false && Boolean(normalizeGlossText(item.glossZh));
+  }
   const wordsInput = $("#words");
   // 生成后自动移除已用词时，不能触发 resetGeneratedContent，否则刚出的文章会被清掉。
   let suppressWordReset = false;
@@ -443,7 +469,9 @@
       if (used) used.hidden = true;
       return;
     }
-    const total = Array.isArray(state.generated.targetWords) ? state.generated.targetWords.length : 0;
+    const total = Array.isArray(state.generated.targetWords)
+      ? state.generated.targetWords.filter(isValidTargetWord).length
+      : 0;
     const missing = Array.isArray(state.generated.uncoveredWords) ? state.generated.uncoveredWords.length : 0;
     const covered = Math.max(0, total - missing);
     const required = Options.computeNovelRequiredCoverage(total);
@@ -1593,7 +1621,7 @@
     }
     if (!revisionMode && !strictCoverage && state.generationAttempted) return;
     const words = (revisionMode || strictCoverage) && state.generated?.targetWords?.length
-      ? state.generated.targetWords.map((item) => item.word)
+      ? state.generated.targetWords.filter(isValidTargetWord).map((item) => item.word)
       : getNovelTargetWords();
     if (!revisionMode && !strictCoverage && !words.length) {
       setState("#generation-state", "请先在上方输入至少 1 个学习词汇。", "error");
@@ -1685,11 +1713,16 @@
       try {
         raw = extractMessage(payload);
         state.generated = parseNovel(raw);
-        const missing = LessonCoverage.reconcile(state.generated, words);
-        const total = words.length;
+        const missingAll = LessonCoverage.reconcile(state.generated, words);
+        // 覆盖率只算有效词：无词义的拼接片段不进分母，也不进漏词与修订。
+        const validTargets = state.generated.targetWords.filter(isValidTargetWord);
+        const validKeys = new Set(validTargets.map((item) => item.word.toLocaleLowerCase()));
+        const missing = missingAll.filter((word) => validKeys.has(String(word).toLocaleLowerCase()));
+        state.generated.uncoveredWords = missing;
+        const total = validTargets.length;
         const required = Options.computeNovelRequiredCoverage(total);
         const covered = Math.max(0, total - missing.length);
-        state.novel.coverageShort = covered < required;
+        state.novel.coverageShort = total > 0 && covered < required;
         // 整章档：字数明显不足或返回被截断时只提示，不自动重试。
         const articleWords = String(state.generated.article || "").split(/\s+/).filter(Boolean).length;
         const wantWords = Number($("#novel-length").value) || 600;
@@ -1711,7 +1744,7 @@
         state.generationRaw = redactSecret(raw || readProviderErrorMessage(payload) || JSON.stringify(payload).slice(0, 12000), key);
       }
       const coverageMessage = state.novel.coverageShort && state.generated
-        ? `本次只嵌入 ${Math.max(0, state.generated.targetWords.length - state.generated.uncoveredWords.length)}/${state.generated.targetWords.length} 个目标词，未达到要求（至少需要 ${Options.computeNovelRequiredCoverage(state.generated.targetWords.length)} 个）。`
+        ? (() => { const valid = state.generated.targetWords.filter(isValidTargetWord); const miss = state.generated.uncoveredWords || []; const hit = Math.max(0, valid.length - miss.length); return `本次只嵌入 ${hit}/${valid.length} 个目标词，未达到要求（至少需要 ${Options.computeNovelRequiredCoverage(valid.length)} 个）。`; })()
         : "";
       setState("#generation-state", coverageMessage || state.generationError || "生成完成。译文默认隐藏，可在参数里打开。", coverageMessage || state.generationError ? "error" : "success");
       renderResult();
@@ -1761,7 +1794,8 @@
     // 题型、选项、答案、解析与原文依据统一交给 LearningOptions 校验；不再固定 3 道词义 + 2 道理解。
     const errors = Options.validateQuestions(data.questions, data.article, state.questionTypes);
     if (errors.length) throw new Error(errors.join(" "));
-    return { ...data, questions: data.questions, glossary: Options.parseGlossary(data.glossary) };
+    // 与小说同一口径：词义缺失或「模型未提供词义」统一成 null，并标 valid:false。
+    return { ...data, targetWords: normalizeTargetEntries(data.targetWords), questions: data.questions, glossary: Options.parseGlossary(data.glossary) };
   }
   function parseNovel(text) {
     return Options.parseNovelResponse(text);
@@ -1870,7 +1904,11 @@
       try {
         raw = extractMessage(payload);
         state.generated = parseLesson(raw);
-        const missing = LessonCoverage.reconcile(state.generated, words);
+        const missingAll = LessonCoverage.reconcile(state.generated, words);
+        // 新闻同样只把有效词计进漏词与修订。
+        const validKeys = new Set(state.generated.targetWords.filter(isValidTargetWord).map((item) => item.word.toLocaleLowerCase()));
+        const missing = missingAll.filter((word) => validKeys.has(String(word).toLocaleLowerCase()));
+        state.generated.uncoveredWords = missing;
         state.incompleteAccepted = false;
         state.generationError = missing.length ? `文章未覆盖：${missing.join("、")}。` : "";
         if (!revisionMode) consumeUsedWords(words);
@@ -2131,10 +2169,118 @@
   }
 
   // 目标词释义与全文点词朗读：新闻与小说共用；只操作 #result 内的 DOM。
+  function isLookupCandidate(text) {
+    const word = String(text || "").trim();
+    if (word.length < 2) return false;
+    return /^[A-Za-z][A-Za-z'’-]*$/.test(word);
+  }
+  function sentenceAround(element) {
+    const paragraph = element.closest("p") || element.parentElement;
+    const text = paragraph ? paragraph.textContent : element.textContent;
+    const word = element.textContent.trim();
+    const index = text.toLowerCase().indexOf(word.toLowerCase());
+    if (index < 0) return text.slice(0, 400);
+    const before = text.slice(0, index);
+    const after = text.slice(index + word.length);
+    const leftBreak = Math.max(before.lastIndexOf(". "), before.lastIndexOf("! "), before.lastIndexOf("? "));
+    const rightMatch = after.match(/[.!?](\s|$)/);
+    const start = leftBreak >= 0 ? leftBreak + 2 : 0;
+    const end = rightMatch ? index + word.length + rightMatch.index + 1 : text.length;
+    return text.slice(start, Math.min(end, start + 400)).trim();
+  }
   function wireArticleInteractions(targetWords) {
     const glossary = Array.isArray(state.generated && state.generated.glossary) ? state.generated.glossary : [];
     const glossaryMap = new Map(glossary.map((item) => [String(item.word || "").toLowerCase(), item.zh]));
     let sharedPopover = null;
+    let sharedWord = "";
+    let sharedSentence = "";
+    function ensureSharedPopover() {
+      if (sharedPopover) return;
+      sharedPopover = document.createElement("span");
+      sharedPopover.className = "gloss-popover";
+      sharedPopover.setAttribute("role", "status");
+      sharedPopover.hidden = true;
+    }
+    function renderSharedPopover(glossaryZh) {
+      if (!sharedPopover) return;
+      sharedPopover.replaceChildren();
+      const message = document.createElement("span");
+      const key = sharedWord.toLowerCase();
+      let known = glossaryZh || "";
+      if (!known && state.lookupCache.has(key)) known = state.lookupCache.get(key) || "";
+      if (!known && state.lookupCache.has(key)) message.textContent = "疑似不是单词";
+      else if (known) message.textContent = known;
+      else if (state.lookupFailed.has(key)) message.textContent = "查词失败；本页不会自动重试。";
+      else message.textContent = "暂无释义";
+      sharedPopover.append(message);
+      if (known || state.lookupCache.has(key) || state.lookupFailed.has(key)) return;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "text-button";
+      button.style.display = "block";
+      button.style.marginTop = "4px";
+      if (state.lookupPending.has(key)) {
+        button.disabled = true;
+        button.textContent = "正在查…";
+      } else if (state.lookupCount >= 30) {
+        button.disabled = true;
+        button.textContent = "本次会话查词次数已用完";
+      } else {
+        button.textContent = "查一下（少量 token）";
+        button.addEventListener("click", () => { lookupSharedWord(key); });
+      }
+      sharedPopover.append(button);
+    }
+    async function lookupSharedWord(key) {
+      if (!key || state.lookupCount >= 30 || state.lookupPending.has(key) || state.lookupCache.has(key) || state.lookupFailed.has(key)) return;
+      let endpoint;
+      try {
+        endpoint = validateEndpoint($("#endpoint").value.trim());
+      } catch (error) {
+        if (sharedPopover) sharedPopover.firstChild.textContent = error.message;
+        return;
+      }
+      if (endpoint !== "https://api.deepseek.com/chat/completions") {
+        if (sharedPopover) sharedPopover.firstChild.textContent = "当前版本仅支持 DeepSeek 官方 Chat Completions 地址。";
+        return;
+      }
+      const keyValue = $("#api-key").value.trim();
+      const model = $("#model").value.trim();
+      if (!keyValue || !model) {
+        if (sharedPopover) sharedPopover.firstChild.textContent = "请先填写 API Key 与模型 ID。";
+        return;
+      }
+      state.lookupCount += 1;
+      state.lookupPending.add(key);
+      renderSharedPopover("");
+      try {
+        const body = {
+          model,
+          messages: [
+            { role: "system", content: "Give the Chinese meaning of the word as used in the sentence. Reply only with one JSON object: {\"zh\":\"...\"}. If it is not a real English word, reply {\"zh\":null}. No prose, no markdown." },
+            { role: "user", content: `Word: ${sharedWord}\nSentence: ${sharedSentence}` },
+          ],
+          stream: false,
+          thinking: { type: "disabled" },
+          response_format: { type: "json_object" },
+          max_tokens: 80,
+        };
+        const payload = await postJson(endpoint, keyValue, body, 20000);
+        let data;
+        try {
+          data = JSON.parse(String(extractMessage(payload)).replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim());
+        } catch {
+          throw new Error("查词返回不是有效 JSON。");
+        }
+        const zh = typeof data?.zh === "string" && data.zh.trim() ? data.zh.trim() : null;
+        state.lookupCache.set(key, zh);
+      } catch {
+        state.lookupFailed.add(key);
+      } finally {
+        state.lookupPending.delete(key);
+        if (sharedWord.toLowerCase() === key) renderSharedPopover("");
+      }
+    }
     resultElement.querySelectorAll(".target-word").forEach((mark, index) => {
       // 词形不同（如目标词 resilience、文中写 resilient）时也要能对上释义面板。
       const surfaceText = mark.textContent.trim().toLocaleLowerCase();
@@ -2147,7 +2293,7 @@
       detail.className = "gloss-popover";
       detail.setAttribute("role", "status");
       detail.hidden = true;
-      detail.textContent = target.glossZh || glossaryMap.get(surfaceText) || "词义未提供";
+      detail.textContent = isValidTargetWord(target) ? target.glossZh : "疑似非单词 · 已忽略";
       mark.tabIndex = 0;
       mark.setAttribute("role", "button");
       mark.setAttribute("aria-expanded", "false");
@@ -2173,27 +2319,25 @@
       });
     });
     // 全文单词可点击朗读；只有目标词进入 Tab 顺序，避免几千个词把键盘导航拖垮（有意取舍）。
-    // 非目标词：先查生词表（小写匹配），命中显示中文，否则「暂无释义」；发音行为不变。
+    // 非目标词：先查生词表（小写匹配），命中显示中文，否则「暂无释义」+ 按需查义。
     resultElement.querySelectorAll(".article-word").forEach((wordElement) => {
       wordElement.setAttribute("role", "button");
       wordElement.setAttribute("aria-label", `朗读 ${wordElement.textContent}`);
       wordElement.addEventListener("click", () => {
         speakWord(wordElement.textContent);
-        const key = wordElement.textContent.trim().toLowerCase();
+        const surface = wordElement.textContent.trim();
+        if (!isLookupCandidate(surface)) return;
+        const key = surface.toLowerCase();
         const zh = glossaryMap.get(key) || "";
-        if (!sharedPopover) {
-          sharedPopover = document.createElement("span");
-          sharedPopover.className = "gloss-popover";
-          sharedPopover.setAttribute("role", "status");
-          sharedPopover.hidden = true;
-        }
-        sharedPopover.textContent = zh || "暂无释义";
+        sharedWord = surface;
+        sharedSentence = sentenceAround(wordElement);
+        ensureSharedPopover();
+        renderSharedPopover(zh);
         wordElement.insertAdjacentElement("afterend", sharedPopover);
         sharedPopover.hidden = false;
       });
     });
   }
-
   // 导出 / 复制：网页走 Blob 下载，App 走 NativeTTS.saveText。
   // App 侧白名单只收 ASCII 文件名，所以 App 用 vocabulary-hot-read-YYYYMMDD-HHmm.md，网页用中文名。
   function exportStamp(date) {
@@ -2225,8 +2369,10 @@
     if (targets.length) {
       lines.push("", "## 目标词");
       targets.forEach((item) => {
-        const note = item.used === false ? "（未使用）" : "";
-        lines.push(`- ${item.word}${item.glossZh ? ` · ${item.glossZh}` : ""}${note}`);
+        const invalid = !isValidTargetWord(item);
+        const note = !invalid && item.used === false ? "（未使用）" : "";
+        const gloss = invalid ? " · 疑似非单词 · 已忽略" : (item.glossZh ? ` · ${item.glossZh}` : "");
+        lines.push(`- ${item.word}${gloss}${note}`);
       });
     }
     const questions = Array.isArray(lesson.questions) ? lesson.questions : [];
@@ -2328,7 +2474,9 @@
       const surfaceNote = item.matchTier > 1 && item.matchSurface
         ? ` · 文中为 ${escapeHtml(item.matchSurface)}（词形不同）`
         : "";
-      return `<li><strong>${escapeHtml(item.word)}</strong> · ${escapeHtml(item.glossZh || "词义未提供")}${item.used === false ? " · 未使用" : ""}${surfaceNote}</li>`;
+      const invalid = !isValidTargetWord(item);
+      const glossText = invalid ? "疑似非单词 · 已忽略" : (item.glossZh || "词义未提供");
+      return `<li><strong>${escapeHtml(item.word)}</strong> · ${escapeHtml(glossText)}${item.used === false && !invalid ? " · 未使用" : ""}${surfaceNote}</li>`;
     }).join("");
     const omittedMarkup = (lesson.uncoveredWords || []).length
       ? `<p class="coverage-warning" role="alert">本次文章未覆盖以下目标词：${(lesson.uncoveredWords || []).map(escapeHtml).join("、")}。它们已明确标记为未使用；本次未自动重试。</p>`
@@ -2342,7 +2490,13 @@
     const sourceLine = state.novel.sourceUrl
       ? `<p class="helper">来源：<a href="${escapeHtml(state.novel.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(state.novel.fetchedTitle || "查看原页面")}</a></p>`
       : "";
-    resultElement.innerHTML = `
+    const validForSummary = targetWords.filter(isValidTargetWord);
+    const validKeysForSummary = new Set(validForSummary.map((item) => item.word.toLocaleLowerCase()));
+    const validMissingForSummary = (lesson.uncoveredWords || []).filter((word) => validKeysForSummary.has(String(word).toLocaleLowerCase()));
+    const ignoredCount = targetWords.length - validForSummary.length;
+    const coverageSummary = validForSummary.length
+      ? `<p class="helper">有效目标词覆盖 ${validForSummary.length - validMissingForSummary.length}/${validForSummary.length}${ignoredCount ? `；已忽略 ${ignoredCount} 个疑似非单词` : ""}</p>`
+      : "";    resultElement.innerHTML = `
       <section class="result-panel">
         <p class="result-kicker">${escapeHtml(novelKicker())}</p>
         ${state.generationError ? `<p class="coverage-warning" role="alert">${escapeHtml(state.generationError)}</p>` : ""}
@@ -2353,7 +2507,7 @@
         <div class="article-body">${renderArticle(lesson.article, targetWords)}</div>
         <details class="original-chapter"><summary>查看原文章节</summary><div class="original-text">${escapeHtml(state.novel.rawText)}</div></details>
       </section>
-      <section class="result-panel"><p class="result-kicker">词汇学习</p><h2>目标词与词义</h2><ul class="word-list">${wordsMarkup}</ul>${omittedMarkup}</section>
+      <section class="result-panel"><p class="result-kicker">词汇学习</p><h2>目标词与词义</h2>${coverageSummary}<ul class="word-list">${wordsMarkup}</ul>${omittedMarkup}</section>
       ${incompletePanel}
       ${translation}`;
     if (resultQuizElement) {
@@ -2407,7 +2561,9 @@
       const surfaceNote = item.matchTier > 1 && item.matchSurface
         ? ` · 文中为 ${escapeHtml(item.matchSurface)}（词形不同）`
         : "";
-      return `<li><strong>${escapeHtml(item.word)}</strong> · ${escapeHtml(item.glossZh || "词义未提供")}${item.used === false ? " · 未使用" : ""}${surfaceNote}</li>`;
+      const invalid = !isValidTargetWord(item);
+      const glossText = invalid ? "疑似非单词 · 已忽略" : (item.glossZh || "词义未提供");
+      return `<li><strong>${escapeHtml(item.word)}</strong> · ${escapeHtml(glossText)}${item.used === false && !invalid ? " · 未使用" : ""}${surfaceNote}</li>`;
     }).join("");
     const omittedMarkup = (lesson.uncoveredWords || []).length
       ? `<p class="coverage-warning" role="alert">本次文章未覆盖以下目标词：${(lesson.uncoveredWords || []).map(escapeHtml).join("、")}。它们已明确标记为未使用；本次未自动重试。</p>`
@@ -2435,7 +2591,13 @@
     const incompletePanel = lesson.uncoveredWords.length && !state.incompleteAccepted
       ? `<section class="result-panel incomplete-actions"><p class="result-kicker">文章尚未完成</p><h2>目标词没有全部出现</h2><p>练习暂不可用。你可以确认后请求一次修订，或接受当前文章并继续。</p><div class="button-row"><button class="button primary" id="revise-button" type="button" ${state.revisionUsed ? "disabled" : ""}>确认修订一次</button><button class="button secondary" id="accept-incomplete" type="button">接受当前文章</button></div><p class="helper">${state.revisionUsed ? "已使用一次修订机会；不会再次发送请求。" : "修订会额外发送一次请求，可能产生费用。只有确认后才会发送。"}</p></section>`
       : "";
-    // 阅读块写进 03 屏容器，练习块写进 04 屏容器；renderResult 仍是唯一入口。
+    const validForSummary = targetWords.filter(isValidTargetWord);
+    const validKeysForSummary = new Set(validForSummary.map((item) => item.word.toLocaleLowerCase()));
+    const validMissingForSummary = (lesson.uncoveredWords || []).filter((word) => validKeysForSummary.has(String(word).toLocaleLowerCase()));
+    const ignoredCount = targetWords.length - validForSummary.length;
+    const coverageSummary = validForSummary.length
+      ? `<p class="helper">有效目标词覆盖 ${validForSummary.length - validMissingForSummary.length}/${validForSummary.length}${ignoredCount ? `；已忽略 ${ignoredCount} 个疑似非单词` : ""}</p>`
+      : "";    // 阅读块写进 03 屏容器，练习块写进 04 屏容器；renderResult 仍是唯一入口。
     resultElement.innerHTML = `
       <section class="result-panel">
         <p class="result-kicker">基于检索摘要生成 · 不是新闻原文</p>
@@ -2448,7 +2610,7 @@
         ${articleImageMarkup(candidate)}
         <ul class="source-list">${createSource(candidate)}</ul>
       </section>
-      <section class="result-panel"><p class="result-kicker">词汇学习</p><h2>目标词与词义</h2><ul class="word-list">${wordsMarkup}</ul>${omittedMarkup}</section>
+      <section class="result-panel"><p class="result-kicker">词汇学习</p><h2>目标词与词义</h2>${coverageSummary}<ul class="word-list">${wordsMarkup}</ul>${omittedMarkup}</section>
       ${incompletePanel}
       ${translation}`;
     if (resultQuizElement) {

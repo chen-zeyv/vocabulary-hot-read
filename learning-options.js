@@ -518,12 +518,18 @@
     if (typeof data.article !== "string" || !data.article.trim()) throw new Error("缺少 article 文本。");
     if (!Array.isArray(data.targetWords) || !data.targetWords.length) throw new Error("targetWords 字段缺失或为空。");
     if (!Array.isArray(data.uncoveredWords)) throw new Error("uncoveredWords 字段缺失或不是数组。");
+    // 词义归一化：缺失、「模型未提供词义」、空白统一成 null，并标 valid:false。
+    const normalizeGloss = (value) => {
+      const text = typeof value === "string" ? value.trim() : "";
+      return text && text !== "模型未提供词义" ? text : null;
+    };
     const targetWords = data.targetWords.map((item) => {
-      if (typeof item === "string") return { word: item.trim() };
+      if (typeof item === "string") return { word: item.trim(), glossZh: null, valid: false };
       if (!item || typeof item !== "object") return null;
       const word = typeof item.word === "string" ? item.word.trim() : "";
       if (!word) return null;
-      return { ...item, word, glossZh: typeof item.glossZh === "string" ? item.glossZh : "" };
+      const glossZh = normalizeGloss(item.glossZh);
+      return { ...item, word, glossZh, valid: Boolean(glossZh) };
     }).filter(Boolean);
     if (!targetWords.length) throw new Error("targetWords 中没有可读取的目标词。");
     const uncoveredWords = data.uncoveredWords.map((item) => {

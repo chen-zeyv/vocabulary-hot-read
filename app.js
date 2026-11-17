@@ -1502,6 +1502,7 @@
     const outputSchema = {
       article: "English article as plain text, 3-8 paragraphs",
       targetWords: [{ word: "exact target word", glossZh: "简短中文词义", used: true }],
+      glossary: [{ word: "subsidy", zh: "补贴" }],
       uncoveredWords: ["words omitted because natural usage was not possible"],
       questions: sequence.map((type, index) => ({
         type,
@@ -1535,6 +1536,7 @@
         ...state.questionTypes.map((type) => type + ": " + (typeGuide[type] || "Use facts from the article.")),
         "Do not use any question type outside the listed sequence.",
         translate ? "Include a faithful Chinese full translation in translation." : "Set translation to null.",
+        "Also return glossary: an array of {word, zh} covering B2-and-above content words that appear verbatim in the final article. Lowercase every word, never repeat a target word, never invent a form that is not literally in the article, dedupe, keep at most 60 entries, and omit anything you are unsure about instead of guessing.",
         "Preserve the given source URL, source name, and dates in the UI metadata; do not invent alternate citations.",
       ].filter(Boolean).join("\n"),
     };
@@ -1729,7 +1731,7 @@
     // 题型、选项、答案、解析与原文依据统一交给 LearningOptions 校验；不再固定 3 道词义 + 2 道理解。
     const errors = Options.validateQuestions(data.questions, data.article, state.questionTypes);
     if (errors.length) throw new Error(errors.join(" "));
-    return { ...data, questions: data.questions };
+    return { ...data, questions: data.questions, glossary: Options.parseGlossary(data.glossary) };
   }
   function parseNovel(text) {
     return Options.parseNovelResponse(text);
@@ -2100,6 +2102,9 @@
 
   // 目标词释义与全文点词朗读：新闻与小说共用；只操作 #result 内的 DOM。
   function wireArticleInteractions(targetWords) {
+    const glossary = Array.isArray(state.generated && state.generated.glossary) ? state.generated.glossary : [];
+    const glossaryMap = new Map(glossary.map((item) => [String(item.word || "").toLowerCase(), item.zh]));
+    let sharedPopover = null;
     resultElement.querySelectorAll(".target-word").forEach((mark, index) => {
       // 词形不同（如目标词 resilience、文中写 resilient）时也要能对上释义面板。
       const surfaceText = mark.textContent.trim().toLocaleLowerCase();
@@ -2112,7 +2117,7 @@
       detail.className = "gloss-popover";
       detail.setAttribute("role", "status");
       detail.hidden = true;
-      detail.textContent = target.glossZh || "词义未提供";
+      detail.textContent = target.glossZh || glossaryMap.get(surfaceText) || "词义未提供";
       mark.tabIndex = 0;
       mark.setAttribute("role", "button");
       mark.setAttribute("aria-expanded", "false");
@@ -2138,13 +2143,132 @@
       });
     });
     // 全文单词可点击朗读；只有目标词进入 Tab 顺序，避免几千个词把键盘导航拖垮（有意取舍）。
+    // 非目标词：先查生词表（小写匹配），命中显示中文，否则「暂无释义」；发音行为不变。
     resultElement.querySelectorAll(".article-word").forEach((wordElement) => {
       wordElement.setAttribute("role", "button");
       wordElement.setAttribute("aria-label", `朗读 ${wordElement.textContent}`);
-      wordElement.addEventListener("click", () => speakWord(wordElement.textContent));
+      wordElement.addEventListener("click", () => {
+        speakWord(wordElement.textContent);
+        const key = wordElement.textContent.trim().toLowerCase();
+        const zh = glossaryMap.get(key) || "";
+        if (!sharedPopover) {
+          sharedPopover = document.createElement("span");
+          sharedPopover.className = "gloss-popover";
+          sharedPopover.setAttribute("role", "status");
+          sharedPopover.hidden = true;
+        }
+        sharedPopover.textContent = zh || "暂无释义";
+        wordElement.insertAdjacentElement("afterend", sharedPopover);
+        sharedPopover.hidden = false;
+      });
     });
   }
 
+  // 导出 / 复制：网页走 Blob 下载，App 走 NativeTTS.saveText。
+  // App 侧白名单只收 ASCII 文件名，所以 App 用 vocabulary-hot-read-YYYYMMDD-HHmm.md，网页用中文名。
+  function exportStamp(date) {
+    const d = date || new Date();
+    const p2 = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
+  }
+
+  function buildLessonMarkdown() {
+    const lesson = state.generated;
+    if (!lesson) return "";
+    const stamp = exportStamp();
+    const lines = [];
+    if (state.mode === "novel") {
+      lines.push(`# 英文学习版（${exportStamp()}）`);
+      if (state.novel.bookTitle || state.novel.chapterLabel) {
+        lines.push("", `- 改写自：《${state.novel.bookTitle || "未填写书名"}》${state.novel.chapterLabel ? `第 ${state.novel.chapterLabel} 章` : ""}`);
+      }
+      if (state.novel.sourceUrl) lines.push(`- 来源：${state.novel.sourceUrl}`);
+    } else {
+      const candidate = state.candidates[state.selectedCandidate] || {};
+      lines.push(`# 阅读文章（${stamp}）`);
+      lines.push("", `- 来源：${candidate.sourceName || "未知"}`);
+      if (candidate.url) lines.push(`- 原文链接：${candidate.url}`);
+      if (candidate.publishedAt) lines.push(`- 发布日期：${candidate.publishedAt}`);
+    }
+    lines.push("", "## 正文", "", String(lesson.article || "").trim());
+    const targets = Array.isArray(lesson.targetWords) ? lesson.targetWords : [];
+    if (targets.length) {
+      lines.push("", "## 目标词");
+      targets.forEach((item) => {
+        const note = item.used === false ? "（未使用）" : "";
+        lines.push(`- ${item.word}${item.glossZh ? ` · ${item.glossZh}` : ""}${note}`);
+      });
+    }
+    const questions = Array.isArray(lesson.questions) ? lesson.questions : [];
+    if (questions.length) {
+      lines.push("", "## 题目与答案");
+      questions.forEach((question, index) => {
+        lines.push("", `### ${index + 1}. ${question.prompt}`);
+        (question.options || []).forEach((option, optionIndex) => lines.push(`- ${option}${optionIndex === question.correctOption ? " ✅" : ""}`));
+        if (question.explanation) lines.push("", `解析：${question.explanation}`);
+      });
+    }
+    return lines.join("\n") + "\n";
+  }
+
+  function showArticleToast(message) {
+    setSpeechState(message);
+    window.setTimeout(() => setSpeechState(""), 1600);
+  }
+
+  function copyArticleText() {
+    const text = String(state.generated && state.generated.article || "").trim();
+    if (!text) return;
+    const done = () => showArticleToast("已复制");
+    const fallback = () => {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.top = "-1000px";
+      document.body.appendChild(area);
+      area.select();
+      let ok = false;
+      try { ok = document.execCommand("copy"); } catch { ok = false; }
+      area.remove();
+      if (ok) done();
+      else showArticleToast("复制失败，请手动选择");
+    };
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      navigator.clipboard.writeText(text).then(done).catch(fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  function exportArticleMarkdown() {
+    const markdown = buildLessonMarkdown();
+    if (!markdown) return;
+    const stamp = exportStamp();
+    const native = window.NativeTTS;
+    if (native && typeof native.saveText === "function") {
+      try {
+        native.saveText(`vocabulary-hot-read-${stamp}.md`, markdown);
+        return;
+      } catch { /* 落回 Blob 下载 */ }
+    }
+    const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `词汇热读-${stamp}.md`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function wireArticleExport() {
+    const copyButton = resultElement.querySelector("#copy-article");
+    const exportButton = resultElement.querySelector("#export-article");
+    if (copyButton) copyButton.addEventListener("click", copyArticleText);
+    if (exportButton) exportButton.addEventListener("click", exportArticleMarkdown);
+  }
   function renderInvalidNovelResult() {
     if (!state.generationRaw && !state.generationError) return "";
     return `<section class="result-panel"><p class="result-kicker">请求结果</p><h2>无法验证学习版结构</h2><p>${escapeHtml(state.generationError || "模型响应格式不符合要求。")}</p><p class="helper">为避免显示错误内容，本次不显示学习版。你可以检查模型协议后更换章节或参数再发起新的请求。</p>${state.generationRaw ? `<details><summary>查看原始模型文本（当前页面临时显示）</summary><pre class="raw-output">${escapeHtml(state.generationRaw)}</pre></details>` : ""}</section>`;
@@ -2192,7 +2316,7 @@
       <section class="result-panel">
         <p class="result-kicker">${escapeHtml(novelKicker())}</p>
         ${state.generationError ? `<p class="coverage-warning" role="alert">${escapeHtml(state.generationError)}</p>` : ""}
-        <h2>英文学习版</h2>
+        <h2>英文学习版 <span class="article-actions"><button class="text-button" id="copy-article" type="button">复制全文</button><button class="text-button" id="export-article" type="button">导出 .md</button></span></h2>
         <p class="speech-hint">点任意单词可以听发音。目标词还可以点开中文释义。</p>
         <span id="speech-state" class="inline-state speech-state" role="status" aria-live="polite"></span>
         ${sourceLine}
@@ -2207,6 +2331,7 @@
       resultQuizElement.hidden = true;
     }
     wireArticleInteractions(targetWords);
+    wireArticleExport();
     $("#revise-button")?.addEventListener("click", () => {
       if (!navigator.onLine) {
         setState("#generation-state", "当前离线，修订需要网络连接；未发送请求，也未消耗修订机会。", "error");
@@ -2285,7 +2410,7 @@
       <section class="result-panel">
         <p class="result-kicker">基于检索摘要生成 · 不是新闻原文</p>
         ${state.generationError ? `<p class="coverage-warning" role="alert">${escapeHtml(state.generationError)}</p>` : ""}
-        <h2>阅读文章</h2>
+        <h2>阅读文章 <span class="article-actions"><button class="text-button" id="copy-article" type="button">复制全文</button><button class="text-button" id="export-article" type="button">导出 .md</button></span></h2>
         <p class="speech-hint">点任意单词可以听发音。目标词还可以点开中文释义。</p>
         <span id="speech-state" class="inline-state speech-state" role="status" aria-live="polite"></span>
         <p class="helper">来源：${escapeHtml(candidate.sourceName)} · 发布日期：${escapeHtml(candidate.publishedAt || "日期未知")} · 检索日期：${escapeHtml(state.searchTime)}</p>
@@ -2301,6 +2426,7 @@
       resultQuizElement.hidden = !quizPanel;
     }
     wireArticleInteractions(targetWords);
+    wireArticleExport();
     if (state.submitted) showAnswers();
     wireArticleImage();
     $("#quiz-form")?.addEventListener("submit", submitQuiz);

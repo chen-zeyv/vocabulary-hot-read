@@ -935,7 +935,7 @@
           : !key ? "请先填写 API Key"
             : !hasWords ? "先输入至少 1 个词"
               : chars === 0 ? "先粘贴或取回章节"
-                : chars > NOVEL_TEXT_LIMIT ? "章节超过 15,000 字符，请删减"
+                : chars > NOVEL_TEXT_LIMIT ? "章节超过 30,000 字符，请删减"
                   : state.generationAttempted ? "本章已请求生成"
                     : state.generationError && !hasNovelArticle() ? "生成失败，可重试" : "生成英文学习版";
     } else {
@@ -2753,7 +2753,7 @@
       if (epoch !== sessionEpoch) return;
       const chars = Options.countChars(content);
       if (chars > NOVEL_TEXT_LIMIT) {
-        setNovelStatus(`文件共 ${chars.toLocaleString("en-US")} 字符，超过 15,000 字符上限；已保留原正文，请删减后重新选择。`, "error");
+        setNovelStatus(`文件共 ${chars.toLocaleString("en-US")} 字符，超过 30,000 字符上限；已保留原正文，请删减后重新选择。`, "error");
         return;
       }
       state.novel.rawText = content;

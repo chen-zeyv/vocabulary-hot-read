@@ -443,34 +443,33 @@
       if (used) used.hidden = true;
       return;
     }
-    if (!state.novel.coverageShort) {
-      message.textContent = incomplete;
-      box.hidden = false;
-      if (actions) actions.hidden = true;
-      if (used) used.hidden = true;
-      return;
-    }
     const total = Array.isArray(state.generated.targetWords) ? state.generated.targetWords.length : 0;
     const missing = Array.isArray(state.generated.uncoveredWords) ? state.generated.uncoveredWords.length : 0;
     const covered = Math.max(0, total - missing);
     const required = Options.computeNovelRequiredCoverage(total);
-    if (covered >= required) {
+    const coverageMiss = state.novel.coverageShort && covered < required;
+    const coverageMessage = coverageMiss
+      ? `本次只嵌入 ${covered}/${total} 个目标词，未达到要求（至少需要 ${required} 个）。`
+      : "";
+    if (!incomplete && !coverageMiss) {
       box.hidden = true;
+      if (actions) actions.hidden = false;
+      if (used) used.hidden = true;
       return;
     }
-    message.textContent = `本次只嵌入 ${covered}/${total} 个目标词，未达到要求（至少需要 ${required} 个）。`;
+    // 不完整提示优先；覆盖率也偏低时并列显示，强调重写按钮仍可用。
+    message.textContent = incomplete && coverageMessage ? `${incomplete} ${coverageMessage}` : (incomplete || coverageMessage);
     box.hidden = false;
     const usedNow = Boolean(state.novel.strictRewriteUsed);
-    if (actions) actions.hidden = usedNow;
+    if (actions) actions.hidden = !coverageMiss || usedNow;
     if (button) button.disabled = Boolean(state.novel.strictRewritePending);
     if (used) {
-      used.hidden = !usedNow;
+      used.hidden = !(coverageMiss && usedNow);
       used.textContent = state.novel.strictRewritePending
         ? "正在强调重写…"
         : `已使用强调重写机会；本次仍是 ${covered}/${total}，可自行删减词表或换章节重来。`;
     }
   }
-
   function updateNovelDensityLabel() {
     const input = $("#novel-density");
     const value = Number(input ? input.value : Options.NOVEL_DENSITY.default) || Options.NOVEL_DENSITY.default;
@@ -1670,7 +1669,10 @@
       const payload = await postJson(endpoint, key, body);
       if (epoch !== sessionEpoch) return;
       const stopReason = readFinishReasonMessage(payload);
-      if (stopReason) {
+      // 整章档：finish_reason=length 时仍尝试解析已返回内容，由覆盖提示条标注「输出可能不完整」。
+      const truncatedByLength = Array.isArray(payload && payload.choices)
+        && payload.choices.some((c) => c && c.finish_reason === "length");
+      if (stopReason && !truncatedByLength) {
         state.generated = null;
         state.generationAttempted = false;
         state.generationError = stopReason;
@@ -1691,7 +1693,7 @@
         // 整章档：字数明显不足或返回被截断时只提示，不自动重试。
         const articleWords = String(state.generated.article || "").split(/\s+/).filter(Boolean).length;
         const wantWords = Number($("#novel-length").value) || 600;
-        const truncated = Array.isArray(payload && payload.choices) && payload.choices.some((c) => c && c.finish_reason === "length");
+        const truncated = truncatedByLength;
         state.novel.incompleteReason = (articleWords < wantWords * 0.6 || truncated)
           ? `输出可能不完整（实际 ${articleWords} 词 / 目标 ${wantWords} 词）`
           : "";
@@ -1703,7 +1705,9 @@
       } catch (error) {
         state.generated = null;
         state.generationAttempted = false;
-        state.generationError = `模型返回结构无效，未生成学习版：${error.message}`;
+        state.generationError = truncatedByLength
+          ? "模型输出被截断，未能解析为完整学习版（未自动重试）。可在 02 屏缩短长度档或减少目标词后重试。"
+          : `模型返回结构无效，未生成学习版：${error.message}`;
         state.generationRaw = redactSecret(raw || readProviderErrorMessage(payload) || JSON.stringify(payload).slice(0, 12000), key);
       }
       const coverageMessage = state.novel.coverageShort && state.generated

@@ -1689,7 +1689,7 @@
         const covered = Math.max(0, total - missing.length);
         state.novel.coverageShort = covered < required;
         // 整章档：字数明显不足或返回被截断时只提示，不自动重试。
-        const articleWords = String(state.generated.article || "").split(/\\s+/).filter(Boolean).length;
+        const articleWords = String(state.generated.article || "").split(/\s+/).filter(Boolean).length;
         const wantWords = Number($("#novel-length").value) || 600;
         const truncated = Array.isArray(payload && payload.choices) && payload.choices.some((c) => c && c.finish_reason === "length");
         state.novel.incompleteReason = (articleWords < wantWords * 0.6 || truncated)

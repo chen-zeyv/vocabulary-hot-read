@@ -353,6 +353,38 @@
     renderParamSummary();
   }
 
+  // ===== 第 58 轮：步骤进历史栈，安卓返回键逐层后退而不是直接退出 =====
+  // 前进时按步补记录（跳步也补齐连续步骤），后退交给 popstate 收尾；
+  // 这样 02/03/04 上按系统返回键只会退一层，密钥、文章和作答都留在内存里。
+  let historyStep = 0;
+  let glossHistoryOpen = false;
+  let closeGlossFromHistory = null;
+
+  function pushHistoryEntries(target) {
+    if (settingsOpen) return;
+    while (historyStep < target) {
+      historyStep += 1;
+      try {
+        history.pushState({ vhStep: historyStep }, "");
+      } catch {
+        // pushState 不可用时只保留 DOM 行为，返回键退回系统默认。
+        break;
+      }
+    }
+  }
+
+  // 后退优先消费历史记录；extra 用来把压在步骤记录上面的气泡记录一起退掉。
+  function stepBackThroughHistory(target, extra) {
+    const delta = historyStep - target + (extra || 0);
+    if (delta <= 0) return false;
+    try {
+      history.go(-delta);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   // 前进受条件限制、后退随时允许；只改显示与步骤条状态，不重绘结果。
   function setWizardStep(step, options = {}) {
     let next = Math.max(0, Math.min(wizardSteps() - 1, Number(step) || 0));
@@ -362,6 +394,31 @@
         next = currentWizardStep();
         if (options.fromUser) setState(`#step-${index - 1}-status`, stepBlockReason(index), "error");
         break;
+      }
+    }
+    const previous = currentWizardStep();
+    if (!options.fromHistory && next !== previous) {
+      const glossEntry = glossHistoryOpen && closeGlossFromHistory ? 1 : 0;
+      if (next > previous) {
+        if (glossEntry) {
+          // 气泡记录直接改写成新步骤，避免历史栈里夹一层已关闭的气泡。
+          closeGlossFromHistory();
+          historyStep = next;
+          try {
+            history.replaceState({ vhStep: next }, "");
+          } catch {
+            historyStep = next - 1;
+            pushHistoryEntries(next);
+          }
+        } else {
+          pushHistoryEntries(next);
+        }
+      } else if (options.fromUser) {
+        if (glossEntry) closeGlossFromHistory();
+        // 先退历史再切屏：popstate 回来时步骤一致，不会把后退误当成前进。
+        stepBackThroughHistory(next, glossEntry);
+      } else if (glossEntry) {
+        closeGlossFromHistory();
       }
     }
     document.body.dataset.wizardStep = String(next);
@@ -388,6 +445,15 @@
         if (button.disabled) return;
         setWizardStep(step, { fromUser: true });
       });
+    });
+    $("#back-to-reading")?.addEventListener("click", () => {
+      setWizardStep(2, { fromUser: true });
+    });
+    $("#retry-quiz")?.addEventListener("click", () => {
+      if (!state.generated) return;
+      state.answers = {};
+      state.submitted = false;
+      renderResult();
     });
     setWizardStep(0, { fromUser: false });
   }
@@ -902,6 +968,8 @@
     resultElement.replaceChildren();
     resultElement.hidden = true;
     if (resultQuizElement) { resultQuizElement.replaceChildren(); resultQuizElement.hidden = true; }
+    const clearedQuizActions = $("#quiz-actions");
+    if (clearedQuizActions) clearedQuizActions.hidden = true;
     renderGenerationDetail();
     renderCandidates();
     renderResult();
@@ -2587,12 +2655,48 @@
     let sharedPopover = null;
     let sharedWord = "";
     let sharedSentence = "";
+    let glossEntryPushed = false;
     function ensureSharedPopover() {
       if (sharedPopover) return;
       sharedPopover = document.createElement("span");
       sharedPopover.className = "gloss-popover";
       sharedPopover.setAttribute("role", "status");
       sharedPopover.hidden = true;
+    }
+    function hideSharedPopover() {
+      if (sharedPopover) sharedPopover.hidden = true;
+      glossEntryPushed = false;
+      glossHistoryOpen = false;
+      if (closeGlossFromHistory === hideSharedPopover) closeGlossFromHistory = null;
+    }
+    closeGlossFromHistory = hideSharedPopover;
+    function openSharedPopover() {
+      if (!sharedPopover) return;
+      sharedPopover.hidden = false;
+      if (glossEntryPushed) return;
+      glossEntryPushed = true;
+      glossHistoryOpen = true;
+      try {
+        history.pushState({ gloss: true }, "");
+      } catch {
+        glossEntryPushed = false;
+        glossHistoryOpen = false;
+      }
+    }
+    // 可见的关闭入口也走 history.back()，保证栈和界面一致。
+    function closeSharedPopover() {
+      if (!sharedPopover || sharedPopover.hidden) return;
+      if (!glossEntryPushed) {
+        hideSharedPopover();
+        return;
+      }
+      glossEntryPushed = false;
+      glossHistoryOpen = false;
+      try {
+        history.back();
+      } catch {
+        hideSharedPopover();
+      }
     }
     function renderSharedPopover(glossaryZh) {
       if (!sharedPopover) return;
@@ -2606,23 +2710,34 @@
       else if (state.lookupFailed.has(key)) message.textContent = "查词失败；本页不会自动重试。";
       else message.textContent = "暂无释义";
       sharedPopover.append(message);
-      if (known || state.lookupCache.has(key) || state.lookupFailed.has(key)) return;
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "text-button";
-      button.style.display = "block";
-      button.style.marginTop = "4px";
-      if (state.lookupPending.has(key)) {
-        button.disabled = true;
-        button.textContent = "正在查…";
-      } else if (state.lookupCount >= 30) {
-        button.disabled = true;
-        button.textContent = "本次会话查词次数已用完";
-      } else {
-        button.textContent = "查一下（少量 token）";
-        button.addEventListener("click", () => { lookupSharedWord(key); });
+      const settled = known || state.lookupCache.has(key) || state.lookupFailed.has(key);
+      if (!settled) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "text-button";
+        button.style.display = "block";
+        button.style.marginTop = "4px";
+        if (state.lookupPending.has(key)) {
+          button.disabled = true;
+          button.textContent = "正在查…";
+        } else if (state.lookupCount >= 30) {
+          button.disabled = true;
+          button.textContent = "本次会话查词次数已用完";
+        } else {
+          button.textContent = "查一下（少量 token）";
+          button.addEventListener("click", () => { lookupSharedWord(key); });
+        }
+        sharedPopover.append(button);
       }
-      sharedPopover.append(button);
+      // 气泡也是可退层：始终给一个可见的「关闭」，不要求用户只能按系统返回键。
+      const close = document.createElement("button");
+      close.type = "button";
+      close.className = "text-button gloss-close";
+      close.textContent = "关闭";
+      close.style.display = "block";
+      close.style.marginTop = "4px";
+      close.addEventListener("click", closeSharedPopover);
+      sharedPopover.append(close);
     }
     async function lookupSharedWord(key) {
       if (!key || state.lookupCount >= 30 || state.lookupPending.has(key) || state.lookupCache.has(key) || state.lookupFailed.has(key)) return;
@@ -2727,7 +2842,7 @@
         ensureSharedPopover();
         renderSharedPopover(zh);
         wordElement.insertAdjacentElement("afterend", sharedPopover);
-        sharedPopover.hidden = false;
+        openSharedPopover();
       });
     });
   }
@@ -2855,6 +2970,8 @@
         resultElement.hidden = true;
         resultElement.replaceChildren();
         if (resultQuizElement) { resultQuizElement.hidden = true; resultQuizElement.replaceChildren(); }
+        const noQuizActions = $("#quiz-actions");
+        if (noQuizActions) noQuizActions.hidden = true;
         return;
       }
       resultElement.hidden = false;
@@ -2941,6 +3058,8 @@
         resultElement.hidden = true;
         resultElement.replaceChildren();
         if (resultQuizElement) { resultQuizElement.hidden = true; resultQuizElement.replaceChildren(); }
+        const noQuizActions = $("#quiz-actions");
+        if (noQuizActions) noQuizActions.hidden = true;
         return;
       }
       resultElement.hidden = false;
@@ -2980,7 +3099,7 @@
     }).join("");
     const quizPanel = lesson.uncoveredWords.length && !state.incompleteAccepted
       ? ""
-      : `<section class="result-panel"><p class="result-kicker">浏览器本地判分</p><h2>检查理解</h2><form id="quiz-form"><div class="quiz-list">${questions}</div><div class="button-row"><button class="button primary" id="submit-quiz" type="submit" ${state.submitted ? "disabled" : ""}>${state.submitted ? "已提交" : "提交答案并查看解析"}</button><span id="quiz-progress" class="inline-state" role="status"></span><span id="quiz-score" class="inline-state" role="status"></span></div></form></section>`;
+      : `<section class="result-panel"><p class="result-kicker">浏览器本地判分</p><h2>检查理解</h2><form id="quiz-form"><div class="quiz-list">${questions}</div><div class="button-row">${state.submitted ? "" : `<button class="button primary" id="submit-quiz" type="submit">提交答案并查看解析</button>`}<span id="quiz-progress" class="inline-state" role="status"></span><span id="quiz-score" class="inline-state" role="status"></span></div></form></section>`;
     const incompletePanel = lesson.uncoveredWords.length && !state.incompleteAccepted
       ? `<section class="result-panel incomplete-actions"><p class="result-kicker">文章尚未完成</p><h2>目标词没有全部出现</h2><p>练习暂不可用。你可以确认后请求一次修订，或接受当前文章并继续。</p><div class="button-row"><button class="button primary" id="revise-button" type="button" ${state.revisionUsed ? "disabled" : ""}>确认修订一次</button><button class="button secondary" id="accept-incomplete" type="button">接受当前文章</button></div><p class="helper">${state.revisionUsed ? "已使用一次修订机会；不会再次发送请求。" : "修订会额外发送一次请求，可能产生费用。只有确认后才会发送。"}</p></section>`
       : "";
@@ -3009,6 +3128,17 @@
     if (resultQuizElement) {
       resultQuizElement.innerHTML = quizPanel;
       resultQuizElement.hidden = !quizPanel;
+    }
+    // 判分后给出口：回到阅读 / 再练一次；未判分不占位。
+    const quizActions = $("#quiz-actions");
+    if (quizActions) {
+      const showQuizActions = Boolean(quizPanel) && state.submitted;
+      quizActions.hidden = !showQuizActions;
+      const note = $("#quiz-actions-note");
+      if (note) {
+        const reviewed = targetWords.filter((item) => isValidTargetWord(item) && item.used !== false).length;
+        note.textContent = showQuizActions && reviewed ? `已加入今日复习 · ${reviewed} 个词` : "";
+      }
     }
     wireArticleInteractions(targetWords);
     wireArticleExport();
@@ -3300,6 +3430,8 @@
     document.body.classList.add("settings-open");
     const confirm = $("#settings-reset-confirm");
     if (confirm) confirm.hidden = true;
+    const clearConfirm = $("#clear-confirm");
+    if (clearConfirm) clearConfirm.hidden = true;
     renderSettingsStorageNote();
     syncKeyState();
     const body = view.querySelector(".settings-body");
@@ -3361,8 +3493,26 @@
     updateControls();
   }
 
-  window.addEventListener("popstate", () => {
-    if (settingsOpen) finishCloseSettings();
+  // 返回栈分层：设置页 → 词气泡 → 上一步骤；01 上再返回才交给系统退出。
+  window.addEventListener("popstate", (event) => {
+    if (settingsOpen) {
+      finishCloseSettings();
+      return;
+    }
+    if (glossHistoryOpen) {
+      if (closeGlossFromHistory) closeGlossFromHistory();
+      return;
+    }
+    const entryState = event.state || {};
+    if (typeof entryState.vhStep === "number") {
+      historyStep = entryState.vhStep;
+      setWizardStep(entryState.vhStep, { fromHistory: true });
+      return;
+    }
+    // 设置页 / 气泡遗留的记录已无对应视图，忽略即可，不退错层。
+    if (entryState.settings || entryState.gloss) return;
+    historyStep = 0;
+    setWizardStep(0, { fromHistory: true });
   });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape" || !settingsOpen) return;
@@ -3422,6 +3572,8 @@
     resultElement.replaceChildren();
     resultElement.hidden = true;
     if (resultQuizElement) { resultQuizElement.replaceChildren(); resultQuizElement.hidden = true; }
+    const clearedQuizActions = $("#quiz-actions");
+    if (clearedQuizActions) clearedQuizActions.hidden = true;
     $("#word-count").textContent = "0 个词";
     renderGenerationDetail();
     setState("#search-state", "本页已清空。");
@@ -3670,7 +3822,21 @@
   $("#model").addEventListener("change", writeSettings);
   $("#endpoint").addEventListener("change", writeSettings);
   $("#translation").addEventListener("change", writeSettings);
-  $("#clear-button").addEventListener("click", clearSession);
+  // 「清空本页」在设置·学习记录里，先展开二次确认再执行，避免误触丢文章与答案。
+  $("#clear-button")?.addEventListener("click", () => {
+    const confirm = $("#clear-confirm");
+    if (confirm) confirm.hidden = false;
+  });
+  $("#clear-confirm-no")?.addEventListener("click", () => {
+    const confirm = $("#clear-confirm");
+    if (confirm) confirm.hidden = true;
+  });
+  $("#clear-confirm-yes")?.addEventListener("click", () => {
+    const confirm = $("#clear-confirm");
+    if (confirm) confirm.hidden = true;
+    clearSession();
+    closeSettings();
+  });
   $("#topic-tag").addEventListener("input", handleTagDraftInput);
   $("#topic-tag").addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
@@ -3749,6 +3915,14 @@
   initWordbook();
   syncKeyState();
   initSettingsFromRoute();
+  // 刷新会清空内存；把刷新前压入的步骤记录一起退回起点，避免返回键先空转几层。
+  if (history.state && typeof history.state.vhStep === "number" && history.state.vhStep > 0) {
+    try {
+      history.go(-history.state.vhStep);
+    } catch {
+      // 历史记录不可操作时忽略，返回键仍由浏览器 / WebView 默认处理。
+    }
+  }
   updateControls();
 })();
 

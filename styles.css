@@ -459,6 +459,11 @@ body.settings-open { overflow:hidden; }
 .settings-foot-row .helper { flex:1 1 240px; }
 .settings-confirm { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
 .settings-confirm[hidden] { display:none !important; }
+/* 「清空本页」是危险动作：放在设置·学习记录，先点开二次确认才执行。 */
+.settings-danger { margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
+.danger-text { color:#B4472F; }
+.quiz-action-buttons { display:flex; gap:12px; flex-wrap:wrap; width:100%; }
+.quiz-action-buttons .button { min-width:0; flex:1 1 140px; }
 @media (max-width:900px) {
   .settings-view { padding:16px; }
   .settings-panel { width:min(640px, calc(100vw - 32px)); }

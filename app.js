@@ -608,8 +608,8 @@
     }
     const key = $("#api-key").value.trim();
     if (!key) {
-      setNovelStatus("请先填写 DeepSeek API Key。", "error");
-      $("#api-key").focus();
+      setNovelStatus("请先在设置·连接里填写 DeepSeek API Key。", "error");
+      openSettings("settings-connection");
       return;
     }
     const book = state.novel.bookTitle.trim();
@@ -663,8 +663,8 @@
     }
     const key = $("#api-key").value.trim();
     if (!key) {
-      setNovelStatus("请先填写 DeepSeek API Key。", "error");
-      $("#api-key").focus();
+      setNovelStatus("请先在设置·连接里填写 DeepSeek API Key。", "error");
+      openSettings("settings-connection");
       return;
     }
     let parsed;
@@ -1404,8 +1404,8 @@
     }
     const key = $("#api-key").value.trim();
     if (!key) {
-      setState("#search-state", "请先在上方填写 DeepSeek API Key", "error");
-      $("#api-key").focus();
+      setState("#search-state", "请先在设置·连接里填写 DeepSeek API Key。", "error");
+      openSettings("settings-connection");
       return;
     }
     const query = builtQuery.query;
@@ -1688,8 +1688,8 @@
     const model = $("#model").value.trim();
     const key = $("#api-key").value.trim();
     if (!key) {
-      setState("#generation-state", "请先在上方填写 DeepSeek API Key", "error");
-      $("#api-key").focus();
+      setState("#generation-state", "请先在设置·连接里填写 DeepSeek API Key。", "error");
+      openSettings("settings-connection");
       return;
     }
     if (!model) {
@@ -1884,8 +1884,8 @@
     const model = $("#model").value.trim();
     const key = $("#api-key").value.trim();
     if (!key) {
-      setState("#generation-state", "请先在上方填写 DeepSeek API Key", "error");
-      $("#api-key").focus();
+      setState("#generation-state", "请先在设置·连接里填写 DeepSeek API Key。", "error");
+      openSettings("settings-connection");
       return;
     }
     if (!model) {
@@ -3091,8 +3091,6 @@
   // ===== 第 56 轮：独立设置页与设置持久化 =====
   // 只存「配置一次、长期生效」的偏好；API Key、词汇、文章、答案、标签一律不落盘。
   const SETTINGS_KEY = "vh-settings-v1";
-  const NEWS_LENGTH_OPTIONS = [100, 140, 180, 220, 260, 300, 340];
-  const NEWS_DENSITIES = ["sparse", "normal", "dense"];
   let settingsMemory = null;
   let settingsStorageDisabled = false;
   let settingsOpen = false;
@@ -3120,8 +3118,8 @@
     if (Options.LEVELS.indexOf(raw.level) >= 0) out.level = raw.level;
     const news = raw.news && typeof raw.news === "object" ? raw.news : {};
     const newsLength = Number(news.length);
-    if (NEWS_LENGTH_OPTIONS.indexOf(newsLength) >= 0) out.news.length = newsLength;
-    if (NEWS_DENSITIES.indexOf(news.density) >= 0) out.news.density = news.density;
+    if (Options.LENGTH_OPTIONS.indexOf(newsLength) >= 0) out.news.length = newsLength;
+    if (Options.DENSITIES.indexOf(news.density) >= 0) out.news.density = news.density;
     const novel = raw.novel && typeof raw.novel === "object" ? raw.novel : {};
     const novelLength = Number(novel.length);
     if (Options.NOVEL_LENGTH_OPTIONS.indexOf(novelLength) >= 0) out.novel.length = novelLength;
@@ -3181,9 +3179,9 @@
     const level = $("#level") ? $("#level").value : "";
     if (Options.LEVELS.indexOf(level) >= 0) out.level = level;
     const length = Number($("#length") ? $("#length").value : "");
-    if (NEWS_LENGTH_OPTIONS.indexOf(length) >= 0) out.news.length = length;
+    if (Options.LENGTH_OPTIONS.indexOf(length) >= 0) out.news.length = length;
     const density = $("#density") ? $("#density").value : "";
-    if (NEWS_DENSITIES.indexOf(density) >= 0) out.news.density = density;
+    if (Options.DENSITIES.indexOf(density) >= 0) out.news.density = density;
     const novelLength = Number($("#novel-length") ? $("#novel-length").value : "");
     if (Options.NOVEL_LENGTH_OPTIONS.indexOf(novelLength) >= 0) out.novel.length = novelLength;
     const perThousand = Number($("#novel-density") ? $("#novel-density").value : "");
@@ -3297,6 +3295,8 @@
     }
     view.hidden = false;
     document.body.classList.add("settings-open");
+    const confirm = $("#settings-reset-confirm");
+    if (confirm) confirm.hidden = true;
     renderSettingsStorageNote();
     syncKeyState();
     const body = view.querySelector(".settings-body");
@@ -3313,6 +3313,8 @@
     settingsClosing = false;
     view.hidden = true;
     document.body.classList.remove("settings-open");
+    const confirm = $("#settings-reset-confirm");
+    if (confirm) confirm.hidden = true;
     if (location.hash === "#settings") {
       try { history.replaceState(null, "", location.pathname + location.search); } catch { /* ignore */ }
     }

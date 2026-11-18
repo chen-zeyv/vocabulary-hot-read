@@ -147,6 +147,10 @@ input::placeholder, textarea::placeholder { color:#93a0ad; }
 .topbar { padding-inline: max(20px, calc((100vw - 1160px)/2)); }
 .brand-mark { object-fit: cover; border-radius: 8px; }
 .topbar-status { display:flex; align-items:center; gap:12px; }
+/* 齿轮固定最右：只调视觉顺序，DOM 保持原样。 */
+#network-status { order:1; }
+#install-button { order:2; }
+#settings-button { order:3; }
 .status-dot { flex:0 0 8px; }
 .privacy-chip.offline .status-dot { background:#b7791f; }
 .install-button { min-height:44px; }
@@ -180,9 +184,6 @@ input::placeholder, textarea::placeholder { color:#93a0ad; }
 .target-word:focus-visible { outline:2px solid #195c92; outline-offset:2px; }
 .gloss-popover { display:inline-block; margin:0 4px; padding:2px 8px; border-radius:5px; background:#fff2d7; color:#604814; font-family:var(--font, sans-serif); font-size:.85em; }
 .gloss-popover[hidden] { display:none; }
-.connection-panel { border-color:#bcd3e3; background:linear-gradient(180deg,#fbfdff,#f3f9fc); }
-.connection-panel .field-label { margin-top:2px; }
-.connection-panel input[type="password"] { letter-spacing:.02em; }
 .static-key-note { margin:10px 0 0; padding:8px 10px; border-radius:6px; background:#eef5fa; color:#3d556b; font-size:12px; }
 .quick-tags { display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin:9px 0 4px; }
 .quick-tags .helper { margin-right:2px; }
@@ -345,12 +346,6 @@ body.dialog-open { overflow: hidden; }
 .step-nav button:focus-visible { outline:2px solid #195c92; outline-offset:2px; }
 .wizard-pane { min-width:0; }
 .wizard-pane[hidden] { display:none !important; }
-.scope-details { margin:0 0 10px; border:1px solid #d6e2ec; border-radius:9px; background:#f2f7fb; }
-.scope-details summary { min-height:48px; display:flex; align-items:center; padding:0 14px; list-style:none;
-  cursor:pointer; color:#31445a; font-size:13px; font-weight:650; }
-.scope-details summary::-webkit-details-marker { display:none; }
-.scope-details summary::after { content:"▾"; margin-left:auto; color:var(--muted); }
-.scope-details[open] summary::after { content:"▴"; }
 .scope-body { padding:0 14px 12px; border-top:1px solid #dbe6ee; }
 .scope-body .send-scope { margin:10px 0 0; padding:0; border:0; background:transparent; }
 .scope-body > strong { display:block; margin-top:10px; font-size:13px; color:#31445a; }
@@ -367,10 +362,8 @@ body.dialog-open { overflow: hidden; }
   #lesson-form { display:block; }
   .wizard-pane[data-wizard-pane="0"] { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:0 18px; align-items:start; }
   .wizard-pane[data-wizard-pane="0"] > .intro,
-  .wizard-pane[data-wizard-pane="0"] > .scope-details,
   .wizard-pane[data-wizard-pane="0"] > .consent-row,
   .wizard-pane[data-wizard-pane="0"] > .step-actions { grid-column:1 / -1; }
-  .wizard-pane[data-wizard-pane="0"] > .connection-panel,
   .wizard-pane[data-wizard-pane="0"] > [aria-labelledby="words-heading"] { grid-column:1; }
   .wizard-pane[data-wizard-pane="0"] > [aria-labelledby="tag-heading"] { grid-column:2; grid-row:1 / span 2; }
   .intro { padding:6px 0 10px; }
@@ -390,9 +383,7 @@ body.dialog-open { overflow: hidden; }
   .wizard-pane[data-wizard-pane="0"]{grid-template-columns:minmax(0,0.9fr) minmax(0,1fr) minmax(0,1.2fr);gap:10px 18px;}
   .wizard-pane[data-wizard-pane="0"]>.intro{grid-column:1;grid-row:1;}
   .wizard-pane[data-wizard-pane="0"]>.intro h1{font-size:clamp(24px,2.1vw,34px);line-height:1.18;margin:8px 0 8px;}
-  .wizard-pane[data-wizard-pane="0"]>.scope-details{grid-column:1;grid-row:2;margin-bottom:8px;}
   .wizard-pane[data-wizard-pane="0"]>.consent-row{grid-column:1;grid-row:3;}
-  .wizard-pane[data-wizard-pane="0"]>.connection-panel{grid-column:2;grid-row:1;}
   .wizard-pane[data-wizard-pane="0"]>[aria-labelledby=words-heading]{grid-column:2;grid-row:2 / span 2;}
   .wizard-pane[data-wizard-pane="0"]>[aria-labelledby=tag-heading]{grid-column:3;grid-row:1 / span 3;}
   .wizard-pane[data-wizard-pane="0"]>.step-actions{grid-column:1 / -1;grid-row:4;margin-top:10px;}
@@ -464,7 +455,6 @@ body.settings-open { overflow:hidden; }
 .settings-section .scope-body { padding:0; border-top:0; }
 .settings-section .send-scope { margin:0 0 10px; padding:0; border:0; background:transparent; }
 .settings-section .about { padding:0; font-size:13px; }
-.settings-section .about h2 { display:none; }
 .settings-section .type-fieldset { margin:8px 0 0; }
 .settings-wordbook-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:4px; }
 .settings-foot { flex:0 0 auto; padding:10px 20px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:#fff; }

@@ -76,7 +76,6 @@
             <div><label class="field-label" for="region">内容范围</label><div class="region-row"><select id="region"><option value="nearby" selected>身边日常</option><option value="city">本城市 / 地区</option><option value="domestic">国内</option><option value="international">国际</option></select><button id="locate-button" class="text-button locate-button" type="button">用当前位置</button></div></div>
             <div id="region-city-field" hidden><label class="field-label" for="region-city">城市或地区名称</label><input id="region-city" type="text" autocomplete="off" spellcheck="false" placeholder="例如 Hangzhou" /><p class="field-hint">会随搜索一并发给 DeepSeek Search；留空则不能搜索。建议填英文名称，命中率更高。也可以点「用当前位置」自动填入。</p><p id="locate-state" class="field-hint" role="status" aria-live="polite"></p></div>
           </div>
-          <label class="toggle-row"><input id="candidate-translation" type="checkbox" /><span><b>显示候选中文对照</b><small>默认关闭。打开后搜索完会一次性翻译最多 5 条候选的标题与摘要，多一次请求和费用。</small></span></label>
                     </section>
           <div class="step-actions">
             <button id="to-topics" class="button primary" type="button" disabled aria-disabled="true">下一步：找热点</button>
@@ -121,6 +120,7 @@
             <div class="config-title"><div><strong>独立搜索服务</strong><span class="tag success-tag">DeepSeek Search</span></div><p>DeepSeek Search。搜索只发送标签、内容范围和最近 7 天范围，不会把词汇放进搜索请求。</p></div>
             <p class="static-key-note">将使用设置里填写的密钥。</p>
           </div>
+          <label class="toggle-row keep-hint"><input id="candidate-translation" type="checkbox" /><span><b>显示候选中文对照</b><small>默认关闭。打开后搜索完会一次性翻译最多 5 条候选的标题与摘要，多一次请求和费用。</small></span></label>
           <div class="button-row"><button id="search-button" class="button secondary" type="button" disabled>搜索近期热点</button><span id="tag-state" class="inline-state error" role="status" aria-live="polite">先填一个标签</span><span id="search-state" class="inline-state" role="status" aria-live="polite"></span></div>
           <div id="candidate-list" class="candidate-list" aria-live="polite"></div>
         </section>
@@ -237,9 +237,8 @@
             </div>
           </section>
           <section class="settings-section" id="settings-about">
-            <h3>关于</h3>
+            <h3 id="about-title">关于</h3>
             <section class="about" aria-labelledby="about-title">
-              <h2 id="about-title">关于</h2>
               <p>这是什么：把当天要学的词写进一篇可读的英文文章或学习版章节里，读完再做几道题。</p>
               <p>数据去哪：请求直接从浏览器发往 DeepSeek；取源文章配图时会把来源链接发给 microlink.io。站点本身没有服务器，不留存任何内容。</p>
               <p>费用：由你自己的 DeepSeek 账户承担，按官方定价计费。</p>

@@ -3096,6 +3096,7 @@
   let settingsMemory = null;
   let settingsStorageDisabled = false;
   let settingsOpen = false;
+  let settingsClosing = false;
   let settingsHistoryEntry = false;
   let settingsReturnScroll = 0;
 
@@ -3287,6 +3288,7 @@
     }
     settingsReturnScroll = window.scrollY || window.pageYOffset || 0;
     settingsOpen = true;
+    settingsClosing = false;
     settingsHistoryEntry = true;
     try {
       history.pushState({ settings: true }, "", "#settings");
@@ -3308,6 +3310,7 @@
     const view = $("#settings-view");
     if (!view || !settingsOpen) return;
     settingsOpen = false;
+    settingsClosing = false;
     view.hidden = true;
     document.body.classList.remove("settings-open");
     if (location.hash === "#settings") {
@@ -3320,8 +3323,9 @@
 
   // 关闭统一走 history.back()，由 popstate 收尾；直接带 #settings 打开时没有上一条记录，直接收尾。
   function closeSettings() {
-    if (!settingsOpen) return;
+    if (!settingsOpen || settingsClosing) return;
     if (settingsHistoryEntry) {
+      settingsClosing = true;
       settingsHistoryEntry = false;
       history.back();
       return;

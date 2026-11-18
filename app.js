@@ -1793,6 +1793,8 @@
       response_format: { type: "json_object" },
     };
     const epoch = sessionEpoch;
+    // 记录发起生成时所在的步骤：请求期间用户若已退层，就不再强行拉回。
+    const stepAtRequest = currentWizardStep();
     if (strictCoverage) {
       state.novel.strictRewriteUsed = true;
       state.novel.strictRewritePending = true;
@@ -1863,7 +1865,7 @@
       if (hasNovelArticle()) recordLessonWords(state.generated);
       setState("#generation-state", coverageMessage || state.generationError || "生成完成。译文默认隐藏，可在参数里打开。", coverageMessage || state.generationError ? "error" : "success");
       renderResult();
-      if (hasNovelArticle()) setWizardStep(2);
+      if (hasNovelArticle() && currentWizardStep() === stepAtRequest) setWizardStep(2);
     } catch (error) {
       if (epoch !== sessionEpoch) return;
       const detail = classifyError(error, error.response);
@@ -1872,8 +1874,8 @@
       state.generationError = detail;
       state.generationAttempted = false;
       renderResult();
-      // 失败时回到选章节阶段，保留章节与输入；这里只复位状态，不自动重发。
-      setWizardStep(1);
+      // 失败时回到选章节阶段，保留章节与输入；用户已离开原步骤则只留错误信息，不强行改步。
+      if (currentWizardStep() === stepAtRequest) setWizardStep(1, { fromUser: true });
     } finally {
       if (strictCoverage && epoch === sessionEpoch && state.novel.strictRewritePending) {
         state.novel.strictRewritePending = false;
@@ -1993,6 +1995,8 @@
       response_format: { type: "json_object" },
     };
     const epoch = sessionEpoch;
+    // 记录发起生成时所在的步骤：请求期间用户若已退层，就不再强行拉回。
+    const stepAtRequest = currentWizardStep();
     state.generationAttempted = true;
     state.penaltyApplied = false;
     state.submitted = false;
@@ -2038,7 +2042,7 @@
       setState("#generation-state", state.generationError || "生成完成。答案已隐藏，提交后才会显示。", state.generationError ? "error" : "success");
       renderResult();
       if (readingReady) {
-        setWizardStep(2);
+        if (currentWizardStep() === stepAtRequest) setWizardStep(2);
         // 文章渲染完成后再取一次来源配图；同一来源 URL 命中内存缓存时不发请求。
         loadArticleImage(candidate).catch(() => {});
       }
@@ -2049,8 +2053,8 @@
       setState("#generation-state", providerDetail ? `${detail} 服务商说明：${providerDetail}` : detail, "error");
       state.generationError = detail;
       renderResult();
-      // 失败时回到选热点阶段，保留已选候选与输入，不留在空白阅读阶段。
-      setWizardStep(1);
+      // 失败时回到选热点阶段，保留已选候选与输入；用户已离开原步骤则只留错误信息，不强行改步。
+      if (currentWizardStep() === stepAtRequest) setWizardStep(1, { fromUser: true });
     } finally {
       updateControls();
     }
@@ -2667,35 +2671,29 @@
       if (sharedPopover) sharedPopover.hidden = true;
       glossEntryPushed = false;
       glossHistoryOpen = false;
-      if (closeGlossFromHistory === hideSharedPopover) closeGlossFromHistory = null;
     }
     closeGlossFromHistory = hideSharedPopover;
     function openSharedPopover() {
       if (!sharedPopover) return;
       sharedPopover.hidden = false;
+      closeGlossFromHistory = hideSharedPopover;
       if (glossEntryPushed) return;
       glossEntryPushed = true;
       glossHistoryOpen = true;
       try {
-        history.pushState({ gloss: true }, "");
+        history.pushState({ gloss: true, vhStep: historyStep }, "");
       } catch {
         glossEntryPushed = false;
         glossHistoryOpen = false;
       }
     }
-    // 可见的关闭入口也走 history.back()，保证栈和界面一致。
+    // 可见的关闭入口立即收起气泡，再消费对应的历史记录，避免界面与栈不同步。
     function closeSharedPopover() {
       if (!sharedPopover || sharedPopover.hidden) return;
-      if (!glossEntryPushed) {
-        hideSharedPopover();
-        return;
-      }
-      glossEntryPushed = false;
-      glossHistoryOpen = false;
-      try {
-        history.back();
-      } catch {
-        hideSharedPopover();
+      const hadEntry = glossEntryPushed;
+      hideSharedPopover();
+      if (hadEntry) {
+        try { history.back(); } catch { /* ignore */ }
       }
     }
     function renderSharedPopover(glossaryZh) {
@@ -3422,7 +3420,7 @@
     settingsClosing = false;
     settingsHistoryEntry = true;
     try {
-      history.pushState({ settings: true }, "", "#settings");
+      history.pushState({ settings: true, vhStep: historyStep }, "", "#settings");
     } catch {
       settingsHistoryEntry = false;
     }
@@ -3458,7 +3456,8 @@
     if (gear) gear.focus({ preventScroll: true });
   }
 
-  // 关闭统一走 history.back()，由 popstate 收尾；直接带 #settings 打开时没有上一条记录，直接收尾。
+  // 关闭统一走 history.back()，由 popstate 收尾；直接带 #settings 进入（如刷新）时没有本次压入的记录，
+  // 把刷新前遗留的步骤/设置记录一次性退回基础层，避免关闭后还要空按几次返回。
   function closeSettings() {
     if (!settingsOpen || settingsClosing) return;
     if (settingsHistoryEntry) {
@@ -3467,7 +3466,12 @@
       history.back();
       return;
     }
+    const stale = history.state || {};
+    const staleDepth = stale.settings && typeof stale.vhStep === "number" ? stale.vhStep + 1 : 0;
     finishCloseSettings();
+    if (staleDepth > 0) {
+      try { history.go(-staleDepth); } catch { /* ignore */ }
+    }
   }
 
   function initSettingsFromRoute() {
@@ -3501,16 +3505,17 @@
     }
     if (glossHistoryOpen) {
       if (closeGlossFromHistory) closeGlossFromHistory();
+      else glossHistoryOpen = false;
       return;
     }
     const entryState = event.state || {};
+    // 设置/气泡记录本身不是步骤，即使带着 vhStep 也不改步骤。
+    if (entryState.settings || entryState.gloss) return;
     if (typeof entryState.vhStep === "number") {
       historyStep = entryState.vhStep;
       setWizardStep(entryState.vhStep, { fromHistory: true });
       return;
     }
-    // 设置页 / 气泡遗留的记录已无对应视图，忽略即可，不退错层。
-    if (entryState.settings || entryState.gloss) return;
     historyStep = 0;
     setWizardStep(0, { fromHistory: true });
   });
@@ -3587,8 +3592,24 @@
     applyModeUi();
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     updateControls();
-    // 清空后回到准备阶段，避免手机端停留在已无内容的阅读阶段。
-    setWizardStep(0);
+    // 清空后回到准备阶段：把本轮压入的步骤、气泡、设置记录一次性退回基础层，避免空按返回。
+    let staleEntries = historyStep;
+    if (glossHistoryOpen) {
+      staleEntries += 1;
+      if (closeGlossFromHistory) closeGlossFromHistory();
+    }
+    if (settingsOpen) {
+      const currentState = history.state || {};
+      if (settingsHistoryEntry) staleEntries += 1;
+      else if (currentState.settings && typeof currentState.vhStep === "number") staleEntries = currentState.vhStep + 1;
+      settingsHistoryEntry = false;
+      finishCloseSettings();
+    }
+    historyStep = 0;
+    if (staleEntries > 0) {
+      try { history.go(-staleEntries); } catch { /* ignore */ }
+    }
+    setWizardStep(0, { fromHistory: true });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -3915,12 +3936,17 @@
   initWordbook();
   syncKeyState();
   initSettingsFromRoute();
-  // 刷新会清空内存；把刷新前压入的步骤记录一起退回起点，避免返回键先空转几层。
-  if (history.state && typeof history.state.vhStep === "number" && history.state.vhStep > 0) {
-    try {
-      history.go(-history.state.vhStep);
-    } catch {
-      // 历史记录不可操作时忽略，返回键仍由浏览器 / WebView 默认处理。
+  // 刷新会清空内存；把刷新前压入的步骤/气泡记录一起退回起点，避免返回键先空转几层。
+  // 设置页记录留给 closeSettings() 处理，这样刷新后仍能停在设置页，关闭时再一次性退回基础层。
+  const initialHistoryState = history.state || {};
+  if (!initialHistoryState.settings && typeof initialHistoryState.vhStep === "number") {
+    const staleDepth = initialHistoryState.vhStep + (initialHistoryState.gloss ? 1 : 0);
+    if (staleDepth > 0) {
+      try {
+        history.go(-staleDepth);
+      } catch {
+        // 历史记录不可操作时忽略，返回键仍由浏览器 / WebView 默认处理。
+      }
     }
   }
   updateControls();

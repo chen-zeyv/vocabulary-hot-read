@@ -435,3 +435,55 @@ input[type="range"] { width:100%; min-height:32px; accent-color:var(--blue); }
 .coverage-alert-message { margin:0 0 10px; color:#7a4a06; font-weight:700; font-size:14px; }
 .coverage-alert .button-row { align-items:center; }
 #novel-strict-used { margin:0; color:#7a4a06; }
+
+/* ===== 第 56 轮：独立设置页（追加式覆盖） ===== */
+.settings-button { position:relative; flex:0 0 44px; width:44px; height:44px; min-height:44px; padding:0; display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--line); border-radius:50%; background:#fff; color:#31445a; cursor:pointer; }
+.settings-button:hover { background:#f2f7fb; }
+.settings-button:focus-visible { outline:3px solid #6aa6cb; outline-offset:2px; }
+.settings-button[data-key-state="empty"]::after { content:""; position:absolute; top:5px; right:5px; width:8px; height:8px; border-radius:50%; background:#d97706; box-shadow:0 0 0 2px #fff; }
+.key-status-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+#key-status { font-size:13px; color:var(--muted); }
+#key-status[data-filled="true"] { color:#1f6b57; font-weight:650; }
+.provider-summary { margin:10px 0 12px; color:#40566b; font-size:13px; }
+.param-head { display:flex; align-items:center; gap:12px; min-height:44px; padding:0 14px; }
+.param-head #param-summary { flex:1 1 auto; font-size:13px; font-weight:650; color:#31445a; }
+.param-head .text-button { flex:0 0 auto; min-height:44px; }
+body.settings-open { overflow:hidden; }
+.settings-view { position:fixed; inset:0; z-index:120; display:flex; align-items:center; justify-content:center; padding:24px; background:rgba(16,36,54,.46); }
+.settings-view[hidden] { display:none !important; }
+.settings-panel { width:min(720px,100%); max-height:calc(100vh - 48px); max-height:calc(100dvh - 48px); display:flex; flex-direction:column; background:var(--paper); border:1px solid var(--line); border-radius:16px; box-shadow:0 22px 54px rgba(16,36,54,.28); overflow:hidden; }
+.settings-head { flex:0 0 auto; display:flex; align-items:center; gap:10px; padding:10px 20px; border-bottom:1px solid var(--line); background:#fff; }
+.settings-head h2 { font-size:17px; }
+.settings-head h2:focus { outline:none; }
+.settings-back { min-height:44px; }
+.settings-body { flex:1 1 auto; min-height:0; overflow-y:auto; padding:4px 20px 16px; }
+.settings-section { padding:16px 0; border-bottom:1px solid #e8eef3; }
+.settings-section:last-of-type { border-bottom:0; }
+.settings-section h3 { margin:0 0 4px; font-size:15px; color:#1f3d55; }
+.settings-section > .helper { display:block; margin:0 0 10px; }
+.settings-section .scope-body { padding:0; border-top:0; }
+.settings-section .send-scope { margin:0 0 10px; padding:0; border:0; background:transparent; }
+.settings-section .about { padding:0; font-size:13px; }
+.settings-section .about h2 { display:none; }
+.settings-section .type-fieldset { margin:8px 0 0; }
+.settings-wordbook-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:4px; }
+.settings-foot { flex:0 0 auto; padding:10px 20px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:#fff; }
+.settings-foot-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.settings-foot-row .helper { flex:1 1 240px; }
+.settings-confirm { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+.settings-confirm[hidden] { display:none !important; }
+@media (max-width:900px) {
+  .settings-view { padding:16px; }
+  .settings-panel { width:min(640px, calc(100vw - 32px)); }
+}
+@media (max-width:640px) {
+  .settings-view { padding:0; align-items:stretch; background:var(--paper); }
+  .settings-panel { width:100%; max-height:none; height:100%; border:0; border-radius:0; box-shadow:none; }
+  .settings-head { position:sticky; top:0; z-index:2; padding:6px 12px; }
+  .settings-body { padding:2px 16px 16px; }
+  .settings-foot { padding-left:16px; padding-right:16px; }
+  .settings-button { width:44px; height:44px; }
+}
+@media (min-width:1180px) {
+  .wizard-pane[data-wizard-pane="0"] > .key-panel { grid-column:1; grid-row:2; margin-bottom:8px; }
+}

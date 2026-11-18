@@ -301,7 +301,7 @@
       const length = Number($("#novel-length").value) || 600;
       const density = Number($("#novel-density").value) || Options.NOVEL_DENSITY.default;
       const count = Options.computeNovelTargetCount(getWords().length, length, density);
-      summary.textContent = `小说参数：${level} · 约 ${length} 词 · 每千词 ${density} 个目标词 · 预计 ${count} 个目标词（点开调整）`;
+      summary.textContent = `小说参数：${level} · 约 ${length} 词 · 每千词 ${density} 个目标词 · 预计 ${count} 个目标词`;
       syncNovelSizeHint();
       return;
     }
@@ -311,7 +311,7 @@
       return option ? option.textContent.trim() : "";
     };
     const level = pick("#level").split(" · ")[0] || "B1";
-    summary.textContent = `文章参数：${level} · ${pick("#length")} · ${pick("#density")} · ${state.questionTypes.length} 种题型（点开调整）`;
+    summary.textContent = `文章参数：${level} · ${pick("#length")} · ${pick("#density")} · ${state.questionTypes.length} 种题型`;
   }
 
   function updateWizardControls() {
@@ -755,7 +755,7 @@
       ["#news-density-field", !novel],
       ["#novel-length-field", novel],
       ["#novel-density-field", novel],
-      ["#type-fieldset", !novel],
+      ["#settings-practice", !novel],
       ["#news-target-preview", !novel],
       ["#novel-target-preview", novel],
     ];
@@ -1181,6 +1181,7 @@
       return;
     }
     state.questionTypes = next;
+    writeSettings();
     setState("#type-hint", `已选 ${next.length} 种题型：${next.map(Options.questionTypeName).join("、")}。5 道题按顺序轮流分配，每种至少 1 道。`);
     if (state.candidates.length || state.generated) handleCriteriaChange("题型");
   }
@@ -2404,7 +2405,8 @@
     queue.id = "wordbook-queue";
     queue.hidden = true;
     card.append(hint, queue);
-    const panel = document.querySelector(".connection-panel");
+    // 管理动作挂到设置·学习记录；容器缺失时退回 01 词卡，避免导出/清空按钮消失。
+    const panel = document.querySelector("#settings-wordbook") || card;
     let manage = null;
     let count = null;
     if (panel) {
@@ -2466,12 +2468,6 @@
     }
     wordbookUi = { card, hint, queue, count };
     wordsInput.addEventListener("input", () => renderWordbookUi());
-    const footer = document.querySelector(".footer > span");
-    if (footer) {
-      footer.textContent = footer.textContent
-        .replace("不保存学习历史", "学习记录只存在这台设备上")
-        .replace("关闭或刷新页面后，词汇、文章和密钥会清除。", "文章、答案与密钥刷新或关闭即清除。");
-    }
     renderWordbookUi();
   }
   function recordLessonWords(lesson) {
@@ -3088,8 +3084,287 @@
     $("#endpoint").value = config.endpoint;
     $("#model").value = config.model;
     $("#endpoint").readOnly = getProvider() === "deepseek";
+    syncProviderSummary();
     updateControls();
   }
+
+  // ===== 第 56 轮：独立设置页与设置持久化 =====
+  // 只存「配置一次、长期生效」的偏好；API Key、词汇、文章、答案、标签一律不落盘。
+  const SETTINGS_KEY = "vh-settings-v1";
+  const NEWS_LENGTH_OPTIONS = [100, 140, 180, 220, 260, 300, 340];
+  const NEWS_DENSITIES = ["sparse", "normal", "dense"];
+  let settingsMemory = null;
+  let settingsStorageDisabled = false;
+  let settingsOpen = false;
+  let settingsHistoryEntry = false;
+  let settingsReturnScroll = 0;
+
+  function defaultSettings() {
+    return {
+      version: 1,
+      level: "B1",
+      news: { length: 140, density: "normal" },
+      novel: { length: 600, perThousand: Options.NOVEL_DENSITY.default },
+      questionTypes: Options.DEFAULT_QUESTION_TYPES.slice(),
+      translation: false,
+      advanced: { model: PROVIDERS.deepseek.model, endpoint: PROVIDERS.deepseek.endpoint },
+      updatedAt: "",
+    };
+  }
+
+  // 单项非法只回退该项；题型非法（少于 2 / 多于 5 / 未知 id）整组回默认。
+  function sanitizeSettings(raw) {
+    const out = defaultSettings();
+    if (!raw || typeof raw !== "object") return out;
+    if (Options.LEVELS.indexOf(raw.level) >= 0) out.level = raw.level;
+    const news = raw.news && typeof raw.news === "object" ? raw.news : {};
+    const newsLength = Number(news.length);
+    if (NEWS_LENGTH_OPTIONS.indexOf(newsLength) >= 0) out.news.length = newsLength;
+    if (NEWS_DENSITIES.indexOf(news.density) >= 0) out.news.density = news.density;
+    const novel = raw.novel && typeof raw.novel === "object" ? raw.novel : {};
+    const novelLength = Number(novel.length);
+    if (Options.NOVEL_LENGTH_OPTIONS.indexOf(novelLength) >= 0) out.novel.length = novelLength;
+    const perThousand = Number(novel.perThousand);
+    if (perThousand >= Options.NOVEL_DENSITY.min
+      && perThousand <= Options.NOVEL_DENSITY.max
+      && perThousand % Options.NOVEL_DENSITY.step === 0) {
+      out.novel.perThousand = perThousand;
+    }
+    const knownTypes = Options.QUESTION_TYPES.map((item) => item.id);
+    const rawTypes = Array.isArray(raw.questionTypes)
+      ? raw.questionTypes.filter((id) => knownTypes.indexOf(id) >= 0)
+      : [];
+    const types = Array.from(new Set(rawTypes));
+    if (types.length >= Options.MIN_TYPES && types.length <= Options.MAX_TYPES) out.questionTypes = types;
+    if (typeof raw.translation === "boolean") out.translation = raw.translation;
+    const advanced = raw.advanced && typeof raw.advanced === "object" ? raw.advanced : {};
+    const model = typeof advanced.model === "string" ? advanced.model.trim() : "";
+    if (model) out.advanced.model = model.slice(0, 120);
+    const endpoint = typeof advanced.endpoint === "string" ? advanced.endpoint.trim() : "";
+    if (/^https:\/\//i.test(endpoint) && endpoint.length <= 500) out.advanced.endpoint = endpoint;
+    if (typeof raw.updatedAt === "string") out.updatedAt = raw.updatedAt;
+    return out;
+  }
+
+  function readSettings() {
+    if (settingsStorageDisabled) {
+      if (!settingsMemory) settingsMemory = defaultSettings();
+      return settingsMemory;
+    }
+    let raw;
+    try {
+      raw = window.localStorage.getItem(SETTINGS_KEY);
+    } catch {
+      settingsStorageDisabled = true;
+      if (!settingsMemory) settingsMemory = defaultSettings();
+      return settingsMemory;
+    }
+    if (!raw) {
+      settingsMemory = defaultSettings();
+      return settingsMemory;
+    }
+    let parsed = null;
+    try { parsed = JSON.parse(raw); } catch { parsed = null; }
+    if (!parsed || typeof parsed !== "object") {
+      // 坏 JSON：只删坏键并按默认继续，不禁用后续写入。
+      try { window.localStorage.removeItem(SETTINGS_KEY); } catch { /* ignore */ }
+      settingsMemory = defaultSettings();
+      return settingsMemory;
+    }
+    settingsMemory = sanitizeSettings(parsed);
+    return settingsMemory;
+  }
+
+  function settingsFromControls() {
+    const out = defaultSettings();
+    const level = $("#level") ? $("#level").value : "";
+    if (Options.LEVELS.indexOf(level) >= 0) out.level = level;
+    const length = Number($("#length") ? $("#length").value : "");
+    if (NEWS_LENGTH_OPTIONS.indexOf(length) >= 0) out.news.length = length;
+    const density = $("#density") ? $("#density").value : "";
+    if (NEWS_DENSITIES.indexOf(density) >= 0) out.news.density = density;
+    const novelLength = Number($("#novel-length") ? $("#novel-length").value : "");
+    if (Options.NOVEL_LENGTH_OPTIONS.indexOf(novelLength) >= 0) out.novel.length = novelLength;
+    const perThousand = Number($("#novel-density") ? $("#novel-density").value : "");
+    if (perThousand >= Options.NOVEL_DENSITY.min
+      && perThousand <= Options.NOVEL_DENSITY.max
+      && perThousand % Options.NOVEL_DENSITY.step === 0) {
+      out.novel.perThousand = perThousand;
+    }
+    out.questionTypes = state.questionTypes.slice();
+    if ($("#translation")) out.translation = $("#translation").checked;
+    const model = $("#model") ? $("#model").value.trim() : "";
+    if (model) out.advanced.model = model.slice(0, 120);
+    const endpoint = $("#endpoint") ? $("#endpoint").value.trim() : "";
+    if (/^https:\/\//i.test(endpoint) && endpoint.length <= 500) out.advanced.endpoint = endpoint;
+    out.updatedAt = new Date().toISOString();
+    return sanitizeSettings(out);
+  }
+
+  function writeSettings() {
+    const settings = settingsFromControls();
+    settingsMemory = settings;
+    if (!settingsStorageDisabled) {
+      try {
+        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      } catch {
+        settingsStorageDisabled = true;
+      }
+    }
+    renderSettingsStorageNote();
+    syncProviderSummary();
+    renderParamSummary();
+    return settings;
+  }
+
+  function applySettings(settings) {
+    const next = settings || readSettings();
+    if ($("#level")) $("#level").value = next.level;
+    if ($("#length")) $("#length").value = String(next.news.length);
+    if ($("#density")) $("#density").value = next.news.density;
+    if ($("#novel-length")) $("#novel-length").value = String(next.novel.length);
+    if ($("#novel-density")) $("#novel-density").value = String(next.novel.perThousand);
+    if ($("#translation")) $("#translation").checked = next.translation;
+    if ($("#provider")) $("#provider").value = "deepseek";
+    if ($("#model")) $("#model").value = next.advanced.model;
+    if ($("#endpoint")) {
+      $("#endpoint").value = next.advanced.endpoint;
+      $("#endpoint").readOnly = getProvider() === "deepseek";
+    }
+    state.questionTypes = next.questionTypes.slice();
+    renderQuestionTypes();
+    updateNovelDensityLabel();
+    syncProviderSummary();
+    renderSettingsStorageNote();
+    renderTargetPreview();
+    renderParamSummary();
+    return next;
+  }
+
+  function syncProviderSummary() {
+    const element = $("#provider-summary");
+    if (!element) return;
+    const model = $("#model") && $("#model").value.trim() ? $("#model").value.trim() : PROVIDERS.deepseek.model;
+    element.textContent = `DeepSeek · ${model}`;
+  }
+
+  function renderSettingsStorageNote() {
+    const note = $("#settings-storage-note");
+    if (!note) return;
+    note.textContent = settingsStorageDisabled
+      ? "本机存储不可用：设置只在本次会话有效，关闭后不会保留；密钥、文章与答案刷新或关闭即清除。"
+      : "设置只保存在这台设备上；密钥、文章与答案刷新或关闭即清除。";
+  }
+
+  function syncKeyState() {
+    const input = $("#api-key");
+    const filled = Boolean(input && input.value.trim());
+    const button = $("#settings-button");
+    if (button) button.setAttribute("data-key-state", filled ? "filled" : "empty");
+    const status = $("#key-status");
+    if (status) {
+      status.textContent = filled ? "密钥已配置（仅本次会话）" : "密钥未配置";
+      status.setAttribute("data-filled", filled ? "true" : "false");
+    }
+    const settingsStatus = $("#settings-key-status");
+    if (settingsStatus) settingsStatus.textContent = filled ? "已填入密钥：只在本次页面内存中使用，不写入本机存储。" : "密钥未配置。";
+  }
+
+  function settingsScrollTo(targetId) {
+    const section = targetId ? document.getElementById(targetId) : null;
+    if (!section) return;
+    section.scrollIntoView({ block: "start" });
+    const focusTarget = section.querySelector("input:not([type='hidden']), select, textarea, button");
+    if (focusTarget) focusTarget.focus({ preventScroll: true });
+  }
+
+  function openSettings(targetId = "") {
+    const view = $("#settings-view");
+    if (!view) return;
+    if (settingsOpen) {
+      if (targetId) settingsScrollTo(targetId);
+      return;
+    }
+    settingsReturnScroll = window.scrollY || window.pageYOffset || 0;
+    settingsOpen = true;
+    settingsHistoryEntry = true;
+    try {
+      history.pushState({ settings: true }, "", "#settings");
+    } catch {
+      settingsHistoryEntry = false;
+    }
+    view.hidden = false;
+    document.body.classList.add("settings-open");
+    renderSettingsStorageNote();
+    syncKeyState();
+    const body = view.querySelector(".settings-body");
+    if (body) body.scrollTop = 0;
+    const title = $("#settings-title");
+    if (title) title.focus({ preventScroll: true });
+    if (targetId) settingsScrollTo(targetId);
+  }
+
+  function finishCloseSettings() {
+    const view = $("#settings-view");
+    if (!view || !settingsOpen) return;
+    settingsOpen = false;
+    view.hidden = true;
+    document.body.classList.remove("settings-open");
+    if (location.hash === "#settings") {
+      try { history.replaceState(null, "", location.pathname + location.search); } catch { /* ignore */ }
+    }
+    window.scrollTo({ top: settingsReturnScroll, behavior: "auto" });
+    const gear = $("#settings-button");
+    if (gear) gear.focus({ preventScroll: true });
+  }
+
+  // 关闭统一走 history.back()，由 popstate 收尾；直接带 #settings 打开时没有上一条记录，直接收尾。
+  function closeSettings() {
+    if (!settingsOpen) return;
+    if (settingsHistoryEntry) {
+      settingsHistoryEntry = false;
+      history.back();
+      return;
+    }
+    finishCloseSettings();
+  }
+
+  function initSettingsFromRoute() {
+    const view = $("#settings-view");
+    if (!view || location.hash !== "#settings") return;
+    settingsOpen = true;
+    view.hidden = false;
+    document.body.classList.add("settings-open");
+    const title = $("#settings-title");
+    if (title) title.focus({ preventScroll: true });
+  }
+
+  function resetSettings() {
+    try {
+      window.localStorage.removeItem(SETTINGS_KEY);
+    } catch {
+      settingsStorageDisabled = true;
+    }
+    settingsMemory = defaultSettings();
+    applySettings(settingsMemory);
+    const confirm = $("#settings-reset-confirm");
+    if (confirm) confirm.hidden = true;
+    updateControls();
+  }
+
+  window.addEventListener("popstate", () => {
+    if (settingsOpen) finishCloseSettings();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !settingsOpen) return;
+    event.preventDefault();
+    closeSettings();
+  });
+  window.addEventListener("storage", (event) => {
+    if (event.key !== SETTINGS_KEY && event.key !== null) return;
+    settingsStorageDisabled = false;
+    applySettings(readSettings());
+  });
 
   function clearSession() {
     sessionEpoch += 1;
@@ -3097,9 +3372,10 @@
     $("#lesson-form").reset();
     $("#consent").checked = consent;
     $("#api-key").value = "";
+    syncKeyState();
     $("#topic-tag").value = "";
-    // 恢复当前服务商的默认端点与模型；DeepSeek 端点只读，清空后会让用户无法再生成。
-    setProviderDefaults();
+    // 设置控件不在 #lesson-form 内，reset() 不会碰它们；这里再把持久化设置写回一次，确保状态一致。
+    applySettings();
     state.lastConsumedWords = [];
     const restoreButton = $("#restore-words");
     if (restoreButton) restoreButton.hidden = true;
@@ -3114,7 +3390,6 @@
     state.generationRaw = "";
     state.searchTime = "";
     state.tags = [];
-    state.questionTypes = Options.DEFAULT_QUESTION_TYPES.slice();
     state.mode = "news";
     state.novel.rawText = "";
     state.novel.bookTitle = "";
@@ -3367,13 +3642,25 @@
     const row = button.closest(".button-row") || button;
     row.insertAdjacentElement("beforebegin", hint);
   })();
-  $("#novel-length").addEventListener("change", () => handleNovelCriteriaChange("长度"));
+  $("#novel-length").addEventListener("change", () => {
+    writeSettings();
+    handleNovelCriteriaChange("长度");
+  });
   $("#novel-density").addEventListener("input", () => {
     updateNovelDensityLabel();
     renderTargetPreview();
   });
-  $("#novel-density").addEventListener("change", () => handleNovelCriteriaChange("密度"));
-  $("#provider").addEventListener("change", setProviderDefaults);
+  $("#novel-density").addEventListener("change", () => {
+    writeSettings();
+    handleNovelCriteriaChange("密度");
+  });
+  $("#provider").addEventListener("change", () => {
+    setProviderDefaults();
+    writeSettings();
+  });
+  $("#model").addEventListener("change", writeSettings);
+  $("#endpoint").addEventListener("change", writeSettings);
+  $("#translation").addEventListener("change", writeSettings);
   $("#clear-button").addEventListener("click", clearSession);
   $("#topic-tag").addEventListener("input", handleTagDraftInput);
   $("#topic-tag").addEventListener("keydown", (event) => {
@@ -3396,6 +3683,7 @@
   });
   [["#level", "难度"], ["#length", "长度"], ["#density", "密度"]].forEach(([selector, label]) => {
     $(selector).addEventListener("change", () => {
+      writeSettings();
       renderTargetPreview();
       if (state.mode === "novel") handleNovelCriteriaChange(label);
       else handleCriteriaChange(label);
@@ -3414,7 +3702,26 @@
       : "已关闭候选中文对照；已有候选与选择保持不变，可用候选列表上方的“显示中文”恢复。");
   });
   // 密钥只留在页面内存：这里不写任何持久化存储，输入变化只用于刷新按钮状态。
-  $("#api-key").addEventListener("input", updateControls);
+  $("#api-key").addEventListener("input", () => {
+    syncKeyState();
+    updateControls();
+  });
+  $("#settings-button").addEventListener("click", () => openSettings());
+  $("#settings-back").addEventListener("click", closeSettings);
+  $("#key-settings-button").addEventListener("click", () => openSettings("settings-connection"));
+  $("#param-adjust").addEventListener("click", () => openSettings("settings-reading"));
+  $("#settings-view").addEventListener("click", (event) => {
+    if (event.target === $("#settings-view")) closeSettings();
+  });
+  $("#settings-reset").addEventListener("click", () => {
+    const confirm = $("#settings-reset-confirm");
+    if (confirm) confirm.hidden = false;
+  });
+  $("#settings-reset-no").addEventListener("click", () => {
+    const confirm = $("#settings-reset-confirm");
+    if (confirm) confirm.hidden = true;
+  });
+  $("#settings-reset-yes").addEventListener("click", resetSettings);
   if ("speechSynthesis" in window) {
     refreshSpeechVoices();
     window.speechSynthesis.addEventListener?.("voiceschanged", refreshSpeechVoices);
@@ -3422,7 +3729,7 @@
   $("#provider").value = "deepseek";
   setWizardStep(0);
   updateNetworkStatus();
-  setProviderDefaults();
+  applySettings();
   syncRegionCityField();
   applyModeUi();
   renderTagGroups();
@@ -3431,6 +3738,8 @@
   renderTargetPreview();
   tagStateMessage();
   initWordbook();
+  syncKeyState();
+  initSettingsFromRoute();
   updateControls();
 })();
 

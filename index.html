@@ -27,7 +27,7 @@
         <img class="brand-mark" src="./icons/icon-192.png" alt="" width="30" height="30" />
         <span>词汇热读</span>
       </a>
-      <div class="topbar-status"><span id="network-status" class="privacy-chip" role="status" aria-live="polite"><span class="status-dot" aria-hidden="true"></span><span id="network-label"><span id="network-label-short">在线</span><span id="network-label-long" class="network-label-long"> · 仅本页会话保存</span></span></span><button id="install-button" class="button secondary install-button" type="button" hidden>安装应用</button></div>
+      <div class="topbar-status"><button id="settings-button" class="settings-button" type="button" aria-label="设置" aria-haspopup="dialog" data-key-state="empty"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M19.4 13.4a7.6 7.6 0 0 0 0-2.8l2-1.5-2-3.4-2.3 1a7.6 7.6 0 0 0-2.4-1.4L14.4 2h-4l-.3 2.3a7.6 7.6 0 0 0-2.4 1.4l-2.3-1-2 3.4 2 1.5a7.6 7.6 0 0 0 0 2.8l-2 1.5 2 3.4 2.3-1a7.6 7.6 0 0 0 2.4 1.4l.3 2.3h4l.3-2.3a7.6 7.6 0 0 0 2.4-1.4l2.3 1 2-3.4-2-1.5Z"/></svg></button><span id="network-status" class="privacy-chip" role="status" aria-live="polite"><span class="status-dot" aria-hidden="true"></span><span id="network-label"><span id="network-label-short">在线</span><span id="network-label-long" class="network-label-long"> · 仅本页会话保存</span></span></span><button id="install-button" class="button secondary install-button" type="button" hidden>安装应用</button></div>
     </header>
     <div id="offline-banner" class="offline-banner" role="status" hidden>当前离线：可以打开应用界面，热点搜索和文章生成仍需网络连接。</div>
     <main id="top" class="layout">
@@ -48,20 +48,10 @@
           <label class="radio-card"><input type="radio" name="mode" value="novel" /><span><b>小说精读</b><small>把章节改写成英文学习版，不做题、不配图</small></span></label>
         </div>
       </section>
-      <details class="scope-details">
-        <summary>发送范围与费用（点开查看）</summary>
-        <div class="scope-body">
-          <p class="send-scope" role="note">发送范围：热点搜索只发送标签、内容范围和最近 7 天给 DeepSeek Search；点「用当前位置」时，坐标只发给浏览器定位服务与 BigDataCloud 换取城市名，页面不保存坐标；候选中文翻译发送候选标题与摘要；生成时把目标词、所选热点资料和写作要求发送给 DeepSeek Chat。生成文章后会把所选来源文章的链接发给 microlink.io，用于取该文章的一张配图；不发送词汇、密钥、文章内容或做题答案。费用由你的账户承担，密钥只在本页会话内存中使用。小说精读模式下：书名与章节名会发给 DeepSeek Search 查找候选，章节链接会发给 DeepSeek Fetch 取回正文，章节正文与写作要求会发给 DeepSeek Chat 生成学习版；小说模式不请求 microlink，也不把词汇发给 Search 或 Fetch。</p>
-          <strong>发送前请知悉</strong>
-          <p>当前版本使用 DeepSeek Search 搜索和 DeepSeek Chat Completions 生成。搜索按你选择的 1–5 个热点标签进行，只发送标签、内容范围和最近 7 天，不发送你输入的词汇；小说精读的章节查找只发送书名与章节名，取回正文只发送章节链接，章节正文仅发送给 DeepSeek Chat 用于生成学习版；候选中文翻译开启时，会把候选的标题与摘要发给 DeepSeek。费用由你自己的 DeepSeek 账户承担。生成文章后会把所选来源文章的链接发给 microlink.io，用于取该文章的一张配图；不发送词汇、密钥、文章内容或做题答案。密钥只保存在当前页面内存中，但页面脚本和开发者工具可以访问它；刷新页面会清除本页数据。</p>
-        </div>
-      </details>
       <label class="consent-row"><input id="consent" type="checkbox" /><span>我已了解数据发送对象和费用由本人承担。</span></label>
-<section class="panel connection-panel" aria-labelledby="connection-heading">
-        <div class="panel-heading"><div><span class="step-index">连接</span><h2 id="connection-heading">连接设置</h2></div><span class="helper">仅保存在当前页面内存</span></div>
-        <label class="field-label" for="api-key">DeepSeek API Key</label>
-        <input id="api-key" type="password" inputmode="text" autocomplete="off" spellcheck="false" placeholder="在本机页面输入个人密钥" />
-        <p class="field-hint">搜索和生成都用这一个密钥，只需填一次。刷新或清空本页后会清除。</p>
+<section class="panel key-panel" aria-labelledby="key-heading">
+        <div class="panel-heading"><div><span class="step-index">连接</span><h2 id="key-heading">密钥</h2></div><span class="helper">仅保存在当前页面内存</span></div>
+        <div class="key-status-row"><span id="key-status">密钥未配置</span><button id="key-settings-button" class="text-button" type="button">去设置</button></div>
       </section>
 <section class="panel" data-mobile-stage="0" aria-labelledby="words-heading">
           <div class="panel-heading"><div><span class="step-index">01</span><h2 id="words-heading">今天要复习的词</h2></div><span class="helper">一行一个，不限个数，多余的留到下次</span></div>
@@ -97,8 +87,8 @@
 <section id="novel-source-panel" class="panel" aria-labelledby="novel-source-heading" hidden>
   <div class="panel-heading"><div><span class="step-index">02</span><h2 id="novel-source-heading">选一个章节</h2></div><span class="helper">粘贴、上传或自动获取</span></div>
   <label class="field-label" for="novel-text">章节正文</label>
-  <textarea id="novel-text" rows="10" placeholder="粘贴小说章节正文（中文或英文均可）；上限 15,000 字符，只保存在当前页面内存。"></textarea>
-  <div class="field-row"><span id="novel-char-count" class="helper">0 / 15,000 字符</span><button id="novel-clear" class="text-button" type="button">清空章节</button></div>
+  <textarea id="novel-text" rows="10" placeholder="粘贴小说章节正文（中文或英文均可）；上限 30,000 字符，只保存在当前页面内存。"></textarea>
+  <div class="field-row"><span id="novel-char-count" class="helper">0 / 30,000 字符</span><button id="novel-clear" class="text-button" type="button">清空章节</button></div>
   <p id="novel-char-hint" class="field-hint" role="status" aria-live="polite"></p>
   <label class="field-label" for="novel-file">上传 .txt</label>
   <input id="novel-file" class="file-input" type="file" accept=".txt,text/plain" />
@@ -129,7 +119,7 @@
             <div class="panel-heading"><div><span class="step-index">02</span><h2 id="search-heading">找一条近期热点</h2></div><span class="helper">按标签搜索 · 最多 5 条候选</span></div>
             <div class="provider-config search-config">
             <div class="config-title"><div><strong>独立搜索服务</strong><span class="tag success-tag">DeepSeek Search</span></div><p>DeepSeek Search。搜索只发送标签、内容范围和最近 7 天范围，不会把词汇放进搜索请求。</p></div>
-            <p class="static-key-note">将使用上方填写的密钥。</p>
+            <p class="static-key-note">将使用设置里填写的密钥。</p>
           </div>
           <div class="button-row"><button id="search-button" class="button secondary" type="button" disabled>搜索近期热点</button><span id="tag-state" class="inline-state error" role="status" aria-live="polite">先填一个标签</span><span id="search-state" class="inline-state" role="status" aria-live="polite"></span></div>
           <div id="candidate-list" class="candidate-list" aria-live="polite"></div>
@@ -142,27 +132,10 @@
         <div class="wizard-pane" data-wizard-pane="2" hidden>
 <section class="panel" data-mobile-stage="1" aria-labelledby="generation-heading">
           <div class="panel-heading"><div><span class="step-index">03</span><h2 id="generation-heading">生成阅读与练习</h2></div><span id="generation-helper" class="helper">候选确认后只发送一次生成请求</span></div>
-          <div class="provider-config">
-            <div class="config-title"><div><strong>文章生成模型</strong><span class="tag success-tag">DeepSeek Chat Completions</span></div><p>其余服务商保留在配置列表中，但暂未开放，须完成独立验证后再开放。</p></div>
-            <div class="field-grid">
-              <div><label class="field-label" for="provider">服务商 / 协议</label><select id="provider"><option value="deepseek">DeepSeek · Chat Completions</option><option value="qwen" disabled>阿里云百炼 · 暂未开放</option><option value="doubao" disabled>火山引擎 / 豆包 · 暂未开放</option><option value="hunyuan" disabled>腾讯混元 / TokenHub · 暂未开放</option><option value="baidu" disabled>百度千帆 · 暂未开放</option><option value="glm" disabled>智谱 GLM · 暂未开放</option><option value="moonshot" disabled>Moonshot / Kimi · 暂未开放</option><option value="minimax" disabled>MiniMax · 暂未开放</option><option value="custom" disabled>自定义接口 · 暂未开放</option></select></div>
-              <div><label class="field-label" for="model">模型 ID</label><input id="model" type="text" autocomplete="off" placeholder="例如 deepseek-flash" /></div>
+          <p id="provider-summary" class="provider-summary">DeepSeek · deepseek-flash</p>
+                    <div class="param-details" id="param-details">
+              <div class="param-head"><span id="param-summary">文章参数：B1 · 约 140 词 · 正常密度 · 3 种题型</span><button id="param-adjust" class="text-button" type="button">调整</button></div>
             </div>
-            <label class="field-label" for="endpoint">HTTPS API 地址</label>
-            <input id="endpoint" type="url" autocomplete="off" spellcheck="false" placeholder="https://api.example.com/v1/chat/completions" />
-            <p class="field-hint">当前版本固定使用 DeepSeek 官方 HTTPS 接口。不得在地址中加入密钥或查询参数。</p>
-            <p class="static-key-note">将使用上方填写的密钥。</p>
-          </div>
-                    <details class="param-details" id="param-details">
-              <summary id="param-summary">文章参数：B1 · 约 140 词 · 正常密度 · 5 种题型</summary>
-              <div class="param-body">
-            <div class="field-grid preferences">
-            <div><label class="field-label" for="level">英语难度</label><select id="level"><option value="A1">A1 · 入门</option><option value="A2">A2 · 基础</option><option value="B1" selected>B1 · 中级</option><option value="B2">B2 · 中高级</option><option value="C1">C1 · 高级</option><option value="C2">C2 · 精通</option></select></div>
-            <div id="news-length-field"><label class="field-label" for="length">文章长度</label><select id="length"><option value="100">约 100 词</option><option value="140" selected>约 140 词</option><option value="180">约 180 词</option><option value="220">约 220 词</option><option value="260">约 260 词</option><option value="300">约 300 词</option><option value="340">约 340 词</option></select></div>
-            <div id="news-density-field"><label class="field-label" for="density">目标词密度</label><select id="density"><option value="sparse">稀疏</option><option value="normal" selected>正常</option><option value="dense">密集</option></select></div>
-            <div id="novel-length-field" hidden><label class="field-label" for="novel-length">文章长度</label><select id="novel-length"><option value="300">约 300 词</option><option value="450">约 450 词</option><option value="600" selected>约 600 词</option><option value="800">约 800 词</option><option value="1000">约 1000 词</option></select></div>
-            <div id="novel-density-field" hidden><label class="field-label" for="novel-density">每千词目标词数</label><input id="novel-density" type="range" min="6" max="32" step="2" value="20" /><output id="novel-density-value" class="helper" for="novel-density">每千词 20 个</output></div>
-          </div>
           <div id="news-target-preview" class="target-preview" role="status" aria-live="polite">
             <p class="field-label">目标词预览</p>
             <p id="target-preview-count">预计使用 0 个目标词</p>
@@ -174,13 +147,6 @@
             <p id="novel-target-words" class="helper">先在上方粘贴词汇。</p>
             <p class="field-hint">目标词与章节题材差得太远时，覆盖率会偏低；建议词表与章节主题相关。</p>
           </div>
-          <fieldset id="type-fieldset" class="type-fieldset">
-            <legend class="field-label">练习题型（选 2–5 种，固定 5 题，每种至少 1 道）</legend>
-            <div id="question-types" class="type-grid"></div>
-            <p id="type-hint" class="field-hint" role="status" aria-live="polite"></p>
-          </fieldset>
-<label class="toggle-row"><input id="translation" type="checkbox" /><span><b>生成中文全文翻译</b><small>默认关闭，会增加发送内容和模型费用</small></span></label>
-          </div></details>
             <div class="button-row"><button id="generate-button" class="button primary" type="button" disabled>先搜索并选择热点</button><span id="generation-state" class="inline-state" role="status" aria-live="polite"></span></div>
           <div id="generation-detail" class="generation-detail" hidden></div>
         </section>
@@ -202,15 +168,98 @@
       <div class="wizard-pane" data-wizard-pane="3" hidden>
         <section id="result-quiz" class="quiz-section" aria-live="polite"></section>
       </div>
-      <section class="about" aria-labelledby="about-title">
-        <h2 id="about-title">关于</h2>
-        <p>这是什么：把当天要学的词写进一篇可读的英文文章或学习版章节里，读完再做几道题。</p>
-        <p>数据去哪：请求直接从浏览器发往 DeepSeek；取源文章配图时会把来源链接发给 microlink.io。站点本身没有服务器，不留存任何内容。</p>
-        <p>费用：由你自己的 DeepSeek 账户承担，按官方定价计费。</p>
-        <p>反馈：遇到问题请到项目仓库提交 issue（链接 https://github.com/chen-zeyv/vocabulary-hot-read/issues）。</p>
-      </section>
-      <footer class="footer"><span>词汇热读 v1.0.0 · 不保存学习历史。关闭或刷新页面后，词汇、文章和密钥会清除。</span><button id="clear-button" class="text-button" type="button">清空本页</button></footer>
+      <footer class="footer"><span>词汇热读 v1.0.0 · 设置与学习记录只存在这台设备；密钥、文章和答案刷新或关闭即清除。</span><button id="clear-button" class="text-button" type="button">清空本页</button></footer>
     </main>
+
+    <!-- 设置页：放在 #lesson-form 之外，避免「清空本页」的 form.reset() 把设置打回默认。 -->
+    <div id="settings-view" class="settings-view" hidden>
+      <section class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="settings-head">
+          <button id="settings-back" class="text-button settings-back" type="button">← 返回</button>
+          <h2 id="settings-title" tabindex="-1">设置</h2>
+        </div>
+        <div class="settings-body">
+          <section class="settings-section" id="settings-connection">
+            <h3>连接</h3>
+            <p class="helper">只在本设备本次页面内存中使用，刷新或关闭即清除；不写入本机存储。</p>
+            <label class="field-label" for="api-key">DeepSeek API Key</label>
+            <input id="api-key" type="password" inputmode="text" autocomplete="off" spellcheck="false" placeholder="在本机页面输入个人密钥" />
+            <p class="field-hint">搜索和生成都用这一个密钥，只需填一次。刷新或清空本页后会清除。</p>
+            <p id="settings-key-status" class="helper">密钥未配置</p>
+          </section>
+          <section class="settings-section" id="settings-reading">
+            <h3>阅读参数</h3>
+            <p class="helper">改动立即生效；若已有生成文章，返回后按现有规则清除并提示。</p>
+            <div class="field-grid preferences">
+              <div><label class="field-label" for="level">英语难度</label><select id="level"><option value="A1">A1 · 入门</option><option value="A2">A2 · 基础</option><option value="B1" selected>B1 · 中级</option><option value="B2">B2 · 中高级</option><option value="C1">C1 · 高级</option><option value="C2">C2 · 精通</option></select></div>
+              <div id="news-length-field"><label class="field-label" for="length">文章长度</label><select id="length"><option value="100">约 100 词</option><option value="140" selected>约 140 词</option><option value="180">约 180 词</option><option value="220">约 220 词</option><option value="260">约 260 词</option><option value="300">约 300 词</option><option value="340">约 340 词</option></select></div>
+              <div id="news-density-field"><label class="field-label" for="density">目标词密度</label><select id="density"><option value="sparse">稀疏</option><option value="normal" selected>正常</option><option value="dense">密集</option></select></div>
+              <div id="novel-length-field" hidden><label class="field-label" for="novel-length">文章长度</label><select id="novel-length"><option value="300">约 300 词</option><option value="450">约 450 词</option><option value="600" selected>约 600 词</option><option value="800">约 800 词</option><option value="1000">约 1000 词</option></select></div>
+              <div id="novel-density-field" hidden><label class="field-label" for="novel-density">每千词目标词数</label><input id="novel-density" type="range" min="6" max="32" step="2" value="20" /><output id="novel-density-value" class="helper" for="novel-density">每千词 20 个</output></div>
+            </div>
+            <label class="toggle-row"><input id="translation" type="checkbox" /><span><b>生成中文全文翻译</b><small>默认关闭，会增加发送内容和模型费用</small></span></label>
+          </section>
+          <section class="settings-section" id="settings-practice">
+            <h3>练习</h3>
+            <p class="helper">每种题型至少 1 道；选 2–5 种，固定 5 题。</p>
+            <fieldset id="type-fieldset" class="type-fieldset">
+              <legend class="field-label">练习题型（选 2–5 种，固定 5 题，每种至少 1 道）</legend>
+              <div id="question-types" class="type-grid"></div>
+              <p id="type-hint" class="field-hint" role="status" aria-live="polite"></p>
+            </fieldset>
+          </section>
+          <section class="settings-section" id="settings-advanced">
+            <h3>高级</h3>
+            <p class="helper">当前版本仅支持 DeepSeek；地址不得带密钥或查询参数。</p>
+            <div class="provider-config">
+              <div class="config-title"><div><strong>文章生成模型</strong><span class="tag success-tag">DeepSeek Chat Completions</span></div><p>其余服务商保留在配置列表中，但暂未开放，须完成独立验证后再开放。</p></div>
+              <div class="field-grid">
+                <div><label class="field-label" for="provider">服务商 / 协议</label><select id="provider"><option value="deepseek">DeepSeek · Chat Completions</option><option value="qwen" disabled>阿里云百炼 · 暂未开放</option><option value="doubao" disabled>火山引擎 / 豆包 · 暂未开放</option><option value="hunyuan" disabled>腾讯混元 / TokenHub · 暂未开放</option><option value="baidu" disabled>百度千帆 · 暂未开放</option><option value="glm" disabled>智谱 GLM · 暂未开放</option><option value="moonshot" disabled>Moonshot / Kimi · 暂未开放</option><option value="minimax" disabled>MiniMax · 暂未开放</option><option value="custom" disabled>自定义接口 · 暂未开放</option></select></div>
+                <div><label class="field-label" for="model">模型 ID</label><input id="model" type="text" autocomplete="off" placeholder="例如 deepseek-flash" /></div>
+              </div>
+              <label class="field-label" for="endpoint">HTTPS API 地址</label>
+              <input id="endpoint" type="url" autocomplete="off" spellcheck="false" placeholder="https://api.example.com/v1/chat/completions" />
+              <p class="field-hint">当前版本固定使用 DeepSeek 官方 HTTPS 接口。不得在地址中加入密钥或查询参数。</p>
+              <p class="static-key-note">将使用「连接」里填写的密钥。</p>
+            </div>
+          </section>
+          <section class="settings-section" id="settings-wordbook-section">
+            <h3>学习记录</h3>
+            <p class="helper">只存在这台设备；清空不影响设置与当前页面文章。</p>
+            <div id="settings-wordbook"></div>
+          </section>
+          <section class="settings-section" id="settings-privacy">
+            <h3>隐私与费用</h3>
+            <div class="scope-body">
+              <p class="send-scope" role="note">发送范围：热点搜索只发送标签、内容范围和最近 7 天给 DeepSeek Search；点「用当前位置」时，坐标只发给浏览器定位服务与 BigDataCloud 换取城市名，页面不保存坐标；候选中文翻译发送候选标题与摘要；生成时把目标词、所选热点资料和写作要求发送给 DeepSeek Chat。生成文章后会把所选来源文章的链接发给 microlink.io，用于取该文章的一张配图；不发送词汇、密钥、文章内容或做题答案。费用由你的账户承担，密钥只在本页会话内存中使用。小说精读模式下：书名与章节名会发给 DeepSeek Search 查找候选，章节链接会发给 DeepSeek Fetch 取回正文，章节正文与写作要求会发给 DeepSeek Chat 生成学习版；小说模式不请求 microlink，也不把词汇发给 Search 或 Fetch。</p>
+              <strong>发送前请知悉</strong>
+              <p>当前版本使用 DeepSeek Search 搜索和 DeepSeek Chat Completions 生成。搜索按你选择的 1–5 个热点标签进行，只发送标签、内容范围和最近 7 天，不发送你输入的词汇；小说精读的章节查找只发送书名与章节名，取回正文只发送章节链接，章节正文仅发送给 DeepSeek Chat 用于生成学习版；候选中文翻译开启时，会把候选的标题与摘要发给 DeepSeek。费用由你自己的 DeepSeek 账户承担。生成文章后会把所选来源文章的链接发给 microlink.io，用于取该文章的一张配图；不发送词汇、密钥、文章内容或做题答案。密钥只保存在当前页面内存中，但页面脚本和开发者工具可以访问它；刷新页面会清除本页数据。</p>
+            </div>
+          </section>
+          <section class="settings-section" id="settings-about">
+            <h3>关于</h3>
+            <section class="about" aria-labelledby="about-title">
+              <h2 id="about-title">关于</h2>
+              <p>这是什么：把当天要学的词写进一篇可读的英文文章或学习版章节里，读完再做几道题。</p>
+              <p>数据去哪：请求直接从浏览器发往 DeepSeek；取源文章配图时会把来源链接发给 microlink.io。站点本身没有服务器，不留存任何内容。</p>
+              <p>费用：由你自己的 DeepSeek 账户承担，按官方定价计费。</p>
+              <p>反馈：遇到问题请到项目仓库提交 issue（链接 https://github.com/chen-zeyv/vocabulary-hot-read/issues）。</p>
+            </section>
+          </section>
+        </div>
+        <div class="settings-foot">
+          <div id="settings-reset-confirm" class="settings-confirm" hidden>
+            <span class="helper">确定恢复默认设置？不会清除学习记录，也不会清空当前文章。</span>
+            <button id="settings-reset-yes" class="text-button" type="button">确认恢复</button>
+            <button id="settings-reset-no" class="text-button" type="button">取消</button>
+          </div>
+          <div class="settings-foot-row">
+            <button id="settings-reset" class="text-button" type="button">恢复默认设置</button>
+            <span id="settings-storage-note" class="helper">设置只保存在这台设备上；密钥、文章与答案刷新或关闭即清除。</span>
+          </div>
+        </div>
+      </section>
+    </div>
 
     <!-- 修订确认面板：替代浏览器原生确认框；默认隐藏，只有用户点击“确认发送修订”才发送请求。 -->
     <div id="revision-dialog" class="dialog-backdrop" hidden>

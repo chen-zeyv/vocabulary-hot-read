@@ -2343,13 +2343,17 @@
       wordbookUi.queue.replaceChildren();
     } else {
       wordbookUi.queue.hidden = false;
+      const typedWords = new Set(parseWordList(wordsInput.value).words.map((word) => word.toLowerCase()));
       wordbookUi.queue.innerHTML = `
         <div class="wordbook-summary" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px">
           <strong>今日到期 ${due.length} 个</strong>
           <button class="text-button" id="wordbook-add-all" type="button">全部加入</button>
         </div>
         <div class="wordbook-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
-          ${active.map((item) => `<span style="display:inline-flex;align-items:center;gap:4px"><button class="wordbook-chip" type="button" data-word="${escapeHtml(item.word)}" style="padding:6px 10px;border:0;border-radius:999px;background:#F4EDDF">${escapeHtml(item.display)} · ${escapeHtml(item.zh)}</button><button class="text-button" type="button" data-delay="${escapeHtml(item.word)}">顺延</button></span>`).join("")}
+          ${active.map((item) => {
+            const added = typedWords.has(item.word);
+            return `<span style="display:inline-flex;align-items:center;gap:4px"><button class="wordbook-chip" type="button" data-word="${escapeHtml(item.word)}" data-added="${added ? "true" : "false"}" aria-pressed="${added ? "true" : "false"}"><b>${escapeHtml(item.display)}</b> · ${escapeHtml(item.zh)}</button><button class="text-button" type="button" data-delay="${escapeHtml(item.word)}">顺延</button></span>`;
+          }).join("")}
         </div>
         ${rest > 0 ? `<p class="helper">这次没排上（还有 ${rest} 个）</p>` : ""}`;
       $("#wordbook-add-all")?.addEventListener("click", () => {

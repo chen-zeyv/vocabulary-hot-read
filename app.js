@@ -1106,6 +1106,8 @@
     state.tags = result.tags;
     $("#topic-tag").value = "";
     renderTagChips();
+    // 标签满足/解除后必须同步 #tag-state，否则红色「先填一个标签」会留在 02 屏。
+    tagStateMessage();
     setState("#search-state", "");
     handleCriteriaChange("标签");
     return true;
@@ -1114,6 +1116,7 @@
   function removeTagValue(tag) {
     state.tags = Options.removeTag(state.tags, tag);
     renderTagChips();
+    tagStateMessage();
     handleCriteriaChange("标签");
   }
 

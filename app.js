@@ -517,7 +517,8 @@
   }
 
   function getNovelTargetWords() {
-    return getNovelTargetSelection().words;
+    const selection = getNovelTargetSelection();
+    return orderTargetWordsByReview(getWords(), selection.count);
   }
 
   function handleNovelCriteriaChange(label) {
@@ -1514,12 +1515,48 @@
 
   // 目标词数量由难度 × 长度 × 密度矩阵决定，用户不再直接选数量。
   function getTargetSelection() {
-    return Options.selectTargetWords(getWords(), $("#level").value, Number($("#length").value), $("#density").value);
+    const words = getWords();
+    const selection = Options.selectTargetWords(words, $("#level").value, Number($("#length").value), $("#density").value);
+    return { ...selection, words: orderTargetWordsByReview(words, selection.count) };
   }
 
   function getTargetWords(words) {
-    const selection = Options.selectTargetWords(Array.isArray(words) ? words : [], $("#level").value, Number($("#length").value), $("#density").value);
-    return selection.words;
+    const list = Array.isArray(words) ? words : [];
+    const selection = Options.selectTargetWords(list, $("#level").value, Number($("#length").value), $("#density").value);
+    return orderTargetWordsByReview(list, selection.count);
+  }
+
+  // 复习词优先占名额：输入框里已到期（dueAt ≤ 今天）的词按 dueAt 升序排前面，其余按输入顺序补足。
+  function orderTargetWordsByReview(words, count) {
+    const list = Array.isArray(words) ? words : [];
+    const limit = Math.max(0, Math.trunc(Number(count)) || 0);
+    if (!limit) return [];
+    const today = todayKey();
+    const wordbook = readWordbook();
+    const dueAt = new Map();
+    list.forEach((word) => {
+      const key = String(word || "").trim().toLowerCase();
+      if (!key || dueAt.has(key)) return;
+      const record = wordbook.words[key];
+      if (!record || String(record.dueAt || "") > today) return;
+      dueAt.set(key, String(record.dueAt || ""));
+    });
+    if (!dueAt.size) return list.slice(0, limit);
+    const due = [];
+    const rest = [];
+    const seen = new Set();
+    list.forEach((word) => {
+      const key = String(word || "").trim().toLowerCase();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      (dueAt.has(key) ? due : rest).push(word);
+    });
+    due.sort((a, b) => {
+      const left = dueAt.get(String(a).trim().toLowerCase());
+      const right = dueAt.get(String(b).trim().toLowerCase());
+      return left === right ? String(a).localeCompare(String(b)) : left.localeCompare(right);
+    });
+    return due.concat(rest).slice(0, limit);
   }
 
   function makePrompt(words, candidate, revisionWords = []) {
@@ -1582,6 +1619,7 @@
         revisionWords.length ? "This is one user-approved revision. Revise the previousArticle in the revision field so it naturally includes these missing target words: " + revisionWords.join(", ") + ". Keep every fact strictly grounded in the selected source and the previous article; do not add unsupported facts. Return updated questions and evidence sentences that match the final revised article. Do not make another search." : "",
         "Return valid JSON only, matching the schema. Make exactly 5 questions using exactly this type sequence, in order: " + sequence.join(", ") + ". Every selected type (" + state.questionTypes.join(", ") + ") must appear at least once.",
         "Each question must have four options, correctOption as a zero-based integer, a short explanation, and an evidenceSentence copied verbatim from your final article.",
+        "Set word only for vocabulary questions to the exact target word tested; omit word for every other question type.",
         ...state.questionTypes.map((type) => type + ": " + (typeGuide[type] || "Use facts from the article.")),
         "Do not use any question type outside the listed sequence.",
         translate ? "Include a faithful Chinese full translation in translation." : "Set translation to null.",
@@ -2221,14 +2259,21 @@
   }
   function readWordbook() {
     if (wordbookStorageDisabled) return wordbookMemory;
+    let raw;
     try {
-      const raw = window.localStorage.getItem(WORDBOOK_KEY);
-      if (!raw) return emptyWordbook();
-      return sanitizeWordbook(JSON.parse(raw));
+      raw = window.localStorage.getItem(WORDBOOK_KEY);
     } catch {
       wordbookStorageDisabled = true;
       showWordbookNotice();
       return wordbookMemory;
+    }
+    if (!raw) return emptyWordbook();
+    try {
+      return sanitizeWordbook(JSON.parse(raw));
+    } catch {
+      // 坏数据不算「存储不可用」：只清掉坏键，继续用 localStorage。
+      try { window.localStorage.removeItem(WORDBOOK_KEY); } catch { /* ignore */ }
+      return emptyWordbook();
     }
   }
   function saveWordbook(wordbook) {
@@ -2258,11 +2303,12 @@
       .sort((a, b) => (a.dueAt === b.dueAt ? a.word.localeCompare(b.word) : a.dueAt.localeCompare(b.dueAt)));
   }
   function wordbookQuota() {
-    const count = Math.max(1, getWords().length);
+    // 名额只取参数矩阵值，不按当前输入词数封顶；输入不足时由队列长度自然裁剪。
+    const unbounded = 999;
     if (state.mode === "novel") {
-      return Options.computeNovelTargetCount(count, Number($("#novel-length").value), Number($("#novel-density").value));
+      return Math.max(1, Options.computeNovelTargetCount(unbounded, Number($("#novel-length").value), Number($("#novel-density").value)));
     }
-    return Options.computeTargetCount(count, $("#level").value, Number($("#length").value), $("#density").value);
+    return Math.max(1, Options.computeTargetCount(unbounded, $("#level").value, Number($("#length").value), $("#density").value));
   }
   function setWordsFromList(list) {
     wordsInput.value = list.join("\n");
@@ -2303,7 +2349,7 @@
           <button class="text-button" id="wordbook-add-all" type="button">全部加入</button>
         </div>
         <div class="wordbook-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
-          ${active.map((item) => `<span style="display:inline-flex;align-items:center;gap:4px"><button class="wordbook-chip" type="button" data-word="${escapeHtml(item.word)}" style="padding:6px 10px;border:1px solid #D9CDB4;border-radius:999px;background:#FFFCF6">${escapeHtml(item.display)} · ${escapeHtml(item.zh)}</button><button class="text-button" type="button" data-delay="${escapeHtml(item.word)}">顺延</button></span>`).join("")}
+          ${active.map((item) => `<span style="display:inline-flex;align-items:center;gap:4px"><button class="wordbook-chip" type="button" data-word="${escapeHtml(item.word)}" style="padding:6px 10px;border:0;border-radius:999px;background:#F4EDDF">${escapeHtml(item.display)} · ${escapeHtml(item.zh)}</button><button class="text-button" type="button" data-delay="${escapeHtml(item.word)}">顺延</button></span>`).join("")}
         </div>
         ${rest > 0 ? `<p class="helper">这次没排上（还有 ${rest} 个）</p>` : ""}`;
       $("#wordbook-add-all")?.addEventListener("click", () => {
@@ -2317,7 +2363,7 @@
           const wordbook = readWordbook();
           const item = wordbook.words[String(button.dataset.delay || "").toLowerCase()];
           if (!item) return;
-          item.dueAt = addDaysToKey(item.dueAt, 1);
+          item.dueAt = addDaysToKey(item.dueAt > today ? item.dueAt : today, 1);
           saveWordbook(wordbook);
           renderWordbookUi();
         });
@@ -2417,8 +2463,10 @@
     wordbookUi = { card, hint, queue, count };
     wordsInput.addEventListener("input", () => renderWordbookUi());
     const footer = document.querySelector(".footer > span");
-    if (footer && footer.textContent.includes("不保存学习历史")) {
-      footer.textContent = footer.textContent.replace("不保存学习历史", "学习记录只存在这台设备上");
+    if (footer) {
+      footer.textContent = footer.textContent
+        .replace("不保存学习历史", "学习记录只存在这台设备上")
+        .replace("关闭或刷新页面后，词汇、文章和密钥会清除。", "文章、答案与密钥刷新或关闭即清除。");
     }
     renderWordbookUi();
   }
@@ -2492,10 +2540,11 @@
       record.dueAt = addDaysToKey(today, REVIEW_INTERVALS[record.stage]);
       changed = true;
     };
-    const wordQuestions = questions.filter((question) => typeof question.word === "string" && question.word.trim());
+    const wordQuestions = questions.filter((question) => question && question.type === "vocabulary" && typeof question.word === "string" && question.word.trim());
     if (wordQuestions.length) {
       questions.forEach((question, index) => {
-        if (!question || typeof question.word !== "string" || !question.word.trim()) return;
+        if (!question || question.type !== "vocabulary") return;
+        if (typeof question.word !== "string" || !question.word.trim()) return;
         const selected = state.answers[index];
         const answered = selected !== null && selected !== undefined && selected !== "";
         if (!answered || Number(selected) !== question.correctOption) downgrade(question.word);

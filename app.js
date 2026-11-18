@@ -513,12 +513,12 @@
       Number($("#novel-length").value),
       Number($("#novel-density").value),
     );
-    return { count, words: words.slice(0, count), allUsed: count === words.length };
+    // 预览与生成共用同一条排序：到期词按 dueAt 升序前置，其余按输入顺序补足。
+    return { count, words: orderTargetWordsByReview(words, count), allUsed: count === words.length };
   }
 
   function getNovelTargetWords() {
-    const selection = getNovelTargetSelection();
-    return orderTargetWordsByReview(getWords(), selection.count);
+    return getNovelTargetSelection().words;
   }
 
   function handleNovelCriteriaChange(label) {
@@ -1130,7 +1130,7 @@
       const selection = getNovelTargetSelection();
       countElement.textContent = `预计使用 ${selection.count} 个目标词`;
       if (!selection.words.length) wordsElement.textContent = "先在上方粘贴词汇。";
-      else wordsElement.textContent = `${selection.words.join("、")}${selection.allUsed ? "（全部输入词）" : `（共输入 ${getWords().length} 个，本次用前 ${selection.count} 个，其余留到下次）`}`;
+      else wordsElement.textContent = `${selection.words.join("、")}${selection.allUsed ? "（全部输入词）" : `（共输入 ${getWords().length} 个，复习词优先，本次用 ${selection.count} 个，其余留到下次）`}`;
       return;
     }
     const countElement = $("#target-preview-count");
@@ -1139,7 +1139,7 @@
     const selection = getTargetSelection();
     countElement.textContent = `预计使用 ${selection.count} 个目标词`;
     if (!selection.words.length) wordsElement.textContent = "先在上方粘贴词汇。";
-    else wordsElement.textContent = `${selection.words.join("、")}${selection.allUsed ? "（全部输入词）" : `（共输入 ${getWords().length} 个，本次用前 ${selection.count} 个，其余留到下次）`}`;
+    else wordsElement.textContent = `${selection.words.join("、")}${selection.allUsed ? "（全部输入词）" : `（共输入 ${getWords().length} 个，复习词优先，本次用 ${selection.count} 个，其余留到下次）`}`;
   }
 
   function renderQuestionTypes() {
@@ -2352,7 +2352,7 @@
         <div class="wordbook-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
           ${active.map((item) => {
             const added = typedWords.has(item.word);
-            return `<span style="display:inline-flex;align-items:center;gap:4px"><button class="wordbook-chip" type="button" data-word="${escapeHtml(item.word)}" data-added="${added ? "true" : "false"}" aria-pressed="${added ? "true" : "false"}"><b>${escapeHtml(item.display)}</b> · ${escapeHtml(item.zh)}</button><button class="text-button" type="button" data-delay="${escapeHtml(item.word)}">顺延</button></span>`;
+            return `<span class="wordbook-due-item"><button class="wordbook-chip" type="button" data-word="${escapeHtml(item.word)}" data-added="${added ? "true" : "false"}" aria-pressed="${added ? "true" : "false"}"><b>${escapeHtml(item.display)}</b> · ${escapeHtml(item.zh)}</button><span class="wordbook-due-sep" aria-hidden="true"></span><button class="wordbook-delay" type="button" data-delay="${escapeHtml(item.word)}" aria-label="顺延 ${escapeHtml(item.word)}">顺延</button></span>`;
           }).join("")}
         </div>
         ${rest > 0 ? `<p class="helper">这次没排上（还有 ${rest} 个）</p>` : ""}`;
@@ -2544,7 +2544,8 @@
       record.dueAt = addDaysToKey(today, REVIEW_INTERVALS[record.stage]);
       changed = true;
     };
-    const wordQuestions = questions.filter((question) => question && question.type === "vocabulary" && typeof question.word === "string" && question.word.trim());
+    // 只认目标词表内的词义题；表外词不算可退档题，全部表外时仍走整篇兜底。
+    const wordQuestions = questions.filter((question) => question && question.type === "vocabulary" && typeof question.word === "string" && byKey.has(question.word.trim().toLowerCase()));
     if (wordQuestions.length) {
       questions.forEach((question, index) => {
         if (!question || question.type !== "vocabulary") return;

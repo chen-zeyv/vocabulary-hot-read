@@ -354,8 +354,6 @@ body.dialog-open { overflow: hidden; }
 .step-status { color:var(--muted); font-size:12px; }
 .step-status:empty { display:none; }
 .param-details { margin:14px 0 0; border:1px solid #e0e7ed; border-radius:9px; background:#f8fafc; }
-.param-details summary { min-height:44px; display:flex; align-items:center; padding:0 14px; cursor:pointer; font-size:13px; font-weight:650; color:#31445a; }
-.param-details .param-body { padding:0 14px 14px; border-top:1px solid #e6edf3; }
 .quiz-section { min-width:0; }
 @media (min-width:1180px) {
   .layout { display:block; max-width:1160px; }

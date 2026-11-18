@@ -962,7 +962,7 @@
       generateButton.disabled = !(online && consented && key && hasWords && chapterReady && !state.generationAttempted);
       generateButton.textContent = !online ? "当前离线，无法生成"
         : !consented ? "请先勾选同意"
-          : !key ? "请先填写 API Key"
+          : !key ? "请先填写 API Key（设置·连接）"
             : !hasWords ? "先输入至少 1 个词"
               : chars === 0 ? "先粘贴或取回章节"
                 : chars > NOVEL_TEXT_LIMIT ? "章节超过 30,000 字符，请删减"
@@ -2640,7 +2640,7 @@
       const keyValue = $("#api-key").value.trim();
       const model = $("#model").value.trim();
       if (!keyValue || !model) {
-        if (sharedPopover) sharedPopover.firstChild.textContent = "请先填写 API Key 与模型 ID。";
+        if (sharedPopover) sharedPopover.firstChild.textContent = "请先在设置·连接里填写 DeepSeek API Key 与模型 ID。";
         return;
       }
       state.lookupCount += 1;

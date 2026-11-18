@@ -42,6 +42,7 @@
     lookupCache: new Map(),
     lookupFailed: new Set(),
     lookupPending: new Set(),
+    penaltyApplied: false,
     novel: {
       rawText: "",
       bookTitle: "",
@@ -974,6 +975,7 @@
         : state.generationAttempted ? "本条候选已请求生成" : "生成文章与 5 道练习";
     }
     updateWizardControls();
+    renderWordbookUi();
   }
 
   function startOfRecentWindow() {
@@ -1557,6 +1559,7 @@
         correctOption: 0,
         explanation: "Short explanation",
         evidenceSentence: "Exact sentence from article",
+        word: "target word this question tests (only for vocabulary questions)",
       })),
       translation: translate ? "Chinese full translation" : null,
     };
@@ -1685,6 +1688,7 @@
       state.novel.strictRewritePending = true;
     }
     state.generationAttempted = true;
+    state.penaltyApplied = false;
     state.submitted = false;
     state.answers = {};
     state.generationError = "";
@@ -1746,6 +1750,7 @@
       const coverageMessage = state.novel.coverageShort && state.generated
         ? (() => { const valid = state.generated.targetWords.filter(isValidTargetWord); const miss = state.generated.uncoveredWords || []; const hit = Math.max(0, valid.length - miss.length); return `本次只嵌入 ${hit}/${valid.length} 个目标词，未达到要求（至少需要 ${Options.computeNovelRequiredCoverage(valid.length)} 个）。`; })()
         : "";
+      if (hasNovelArticle()) recordLessonWords(state.generated);
       setState("#generation-state", coverageMessage || state.generationError || "生成完成。译文默认隐藏，可在参数里打开。", coverageMessage || state.generationError ? "error" : "success");
       renderResult();
       if (hasNovelArticle()) setWizardStep(2);
@@ -1879,6 +1884,7 @@
     };
     const epoch = sessionEpoch;
     state.generationAttempted = true;
+    state.penaltyApplied = false;
     state.submitted = false;
     state.answers = {};
     state.generationError = "";
@@ -1918,6 +1924,7 @@
         state.generationRaw = redactSecret(raw || readProviderErrorMessage(payload) || JSON.stringify(payload).slice(0, 12000), key);
       }
       const readingReady = hasReadingContent();
+      if (hasReadingContent()) recordLessonWords(state.generated);
       setState("#generation-state", state.generationError || "生成完成。答案已隐藏，提交后才会显示。", state.generationError ? "error" : "success");
       renderResult();
       if (readingReady) {
@@ -2168,6 +2175,339 @@
     });
   }
 
+  // ===== 第 53 轮：艾宾浩斯复习队列 =====
+  const WORDBOOK_KEY = "vh-wordbook-v1";
+  const REVIEW_INTERVALS = [1, 2, 4, 7, 15, 30, 60];
+  let wordbookMemory = { version: 1, words: {} };
+  let wordbookStorageDisabled = false;
+  let wordbookNoticeShown = false;
+  let wordbookUi = null;
+  function localDateKey(date) {
+    const d = date || new Date();
+    const p2 = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+  }
+  function todayKey() { return localDateKey(new Date()); }
+  function addDaysToKey(key, days) {
+    const [y, m, d] = String(key).split("-").map(Number);
+    const date = new Date(y, (m || 1) - 1, d || 1);
+    date.setDate(date.getDate() + Number(days || 0));
+    return localDateKey(date);
+  }
+  function emptyWordbook() { return { version: 1, words: {} }; }
+  function sanitizeWordbook(raw) {
+    const out = emptyWordbook();
+    if (!raw || typeof raw !== "object" || !raw.words || typeof raw.words !== "object") return out;
+    Object.keys(raw.words).forEach((key) => {
+      const item = raw.words[key];
+      if (!item || typeof item !== "object") return;
+      const word = String(item.word || key).trim().toLowerCase();
+      const zh = normalizeGlossText(item.zh);
+      const stage = Math.max(0, Math.min(6, Math.trunc(Number(item.stage)) || 0));
+      const dueAt = /^\d{4}-\d{2}-\d{2}$/.test(String(item.dueAt || "")) ? item.dueAt : addDaysToKey(todayKey(), REVIEW_INTERVALS[stage]);
+      if (!word || !zh || !dueAt) return;
+      out.words[word] = {
+        word,
+        display: String(item.display || word),
+        zh,
+        firstAt: String(item.firstAt || new Date().toISOString()),
+        lastAt: String(item.lastAt || new Date().toISOString()),
+        times: Math.max(0, Math.trunc(Number(item.times)) || 0),
+        stage,
+        dueAt,
+      };
+    });
+    return out;
+  }
+  function readWordbook() {
+    if (wordbookStorageDisabled) return wordbookMemory;
+    try {
+      const raw = window.localStorage.getItem(WORDBOOK_KEY);
+      if (!raw) return emptyWordbook();
+      return sanitizeWordbook(JSON.parse(raw));
+    } catch {
+      wordbookStorageDisabled = true;
+      showWordbookNotice();
+      return wordbookMemory;
+    }
+  }
+  function saveWordbook(wordbook) {
+    wordbookMemory = wordbook;
+    if (wordbookStorageDisabled) return;
+    try {
+      window.localStorage.setItem(WORDBOOK_KEY, JSON.stringify(wordbook));
+    } catch {
+      wordbookStorageDisabled = true;
+      showWordbookNotice();
+    }
+  }
+  function showWordbookNotice() {
+    if (wordbookNoticeShown || !wordbookUi) return;
+    wordbookNoticeShown = true;
+    const notice = document.createElement("p");
+    notice.id = "wordbook-notice";
+    notice.className = "field-hint";
+    notice.setAttribute("role", "status");
+    notice.textContent = "本设备无法保存学习记录";
+    wordbookUi.card.append(notice);
+  }
+  function dueWordbookEntries(today) {
+    const wordbook = readWordbook();
+    return Object.values(wordbook.words)
+      .filter((item) => item && item.dueAt <= today)
+      .sort((a, b) => (a.dueAt === b.dueAt ? a.word.localeCompare(b.word) : a.dueAt.localeCompare(b.dueAt)));
+  }
+  function wordbookQuota() {
+    const count = Math.max(1, getWords().length);
+    if (state.mode === "novel") {
+      return Options.computeNovelTargetCount(count, Number($("#novel-length").value), Number($("#novel-density").value));
+    }
+    return Options.computeTargetCount(count, $("#level").value, Number($("#length").value), $("#density").value);
+  }
+  function setWordsFromList(list) {
+    wordsInput.value = list.join("\n");
+    wordsInput.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  function toggleWordInInput(word) {
+    const target = String(word || "").trim();
+    if (!target) return;
+    const current = parseWordList(wordsInput.value).words;
+    const exists = current.some((item) => item.toLowerCase() === target.toLowerCase());
+    const next = exists
+      ? current.filter((item) => item.toLowerCase() !== target.toLowerCase())
+      : current.concat(target);
+    setWordsFromList(next);
+  }
+  function addWordToInput(word) {
+    const target = String(word || "").trim();
+    if (!target) return;
+    const current = parseWordList(wordsInput.value).words;
+    if (current.some((item) => item.toLowerCase() === target.toLowerCase())) return;
+    setWordsFromList(current.concat(target));
+  }
+  function renderWordbookUi() {
+    if (!wordbookUi) return;
+    const today = todayKey();
+    const due = dueWordbookEntries(today);
+    const quota = wordbookQuota();
+    const active = due.slice(0, quota);
+    const rest = due.length - active.length;
+    if (!due.length) {
+      wordbookUi.queue.hidden = true;
+      wordbookUi.queue.replaceChildren();
+    } else {
+      wordbookUi.queue.hidden = false;
+      wordbookUi.queue.innerHTML = `
+        <div class="wordbook-summary" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px">
+          <strong>今日到期 ${due.length} 个</strong>
+          <button class="text-button" id="wordbook-add-all" type="button">全部加入</button>
+        </div>
+        <div class="wordbook-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+          ${active.map((item) => `<span style="display:inline-flex;align-items:center;gap:4px"><button class="wordbook-chip" type="button" data-word="${escapeHtml(item.word)}" style="padding:6px 10px;border:1px solid #D9CDB4;border-radius:999px;background:#FFFCF6">${escapeHtml(item.display)} · ${escapeHtml(item.zh)}</button><button class="text-button" type="button" data-delay="${escapeHtml(item.word)}">顺延</button></span>`).join("")}
+        </div>
+        ${rest > 0 ? `<p class="helper">这次没排上（还有 ${rest} 个）</p>` : ""}`;
+      $("#wordbook-add-all")?.addEventListener("click", () => {
+        active.forEach((item) => addWordToInput(item.display));
+      });
+      wordbookUi.queue.querySelectorAll("[data-word]").forEach((button) => {
+        button.addEventListener("click", () => toggleWordInInput(button.dataset.word));
+      });
+      wordbookUi.queue.querySelectorAll("[data-delay]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const wordbook = readWordbook();
+          const item = wordbook.words[String(button.dataset.delay || "").toLowerCase()];
+          if (!item) return;
+          item.dueAt = addDaysToKey(item.dueAt, 1);
+          saveWordbook(wordbook);
+          renderWordbookUi();
+        });
+      });
+    }
+    const learned = getWords().filter((word) => {
+      const item = readWordbook().words[word.toLowerCase()];
+      return item && item.dueAt > today;
+    });
+    if (!learned.length) {
+      wordbookUi.hint.hidden = true;
+      wordbookUi.hint.textContent = "";
+    } else {
+      const shown = learned.slice(0, 3).map((word) => {
+        const item = readWordbook().words[word.toLowerCase()];
+        return `${item.display}（${item.dueAt.slice(5)} 到期）`;
+      });
+      const extra = learned.length - Math.min(3, learned.length);
+      wordbookUi.hint.hidden = false;
+      wordbookUi.hint.textContent = `已学过：${shown.join("、")}，这次用会重新计时${extra > 0 ? `；等 ${extra} 个` : ""}`;
+    }
+    const count = Object.keys(readWordbook().words).length;
+    if (wordbookUi.count) wordbookUi.count.textContent = `学习记录：${count} 个词`;
+  }
+  function initWordbook() {
+    if (wordbookUi) return;
+    const card = wordsInput.closest("section") || wordsInput.parentElement;
+    const hint = document.createElement("p");
+    hint.id = "wordbook-early-hint";
+    hint.className = "field-hint";
+    hint.setAttribute("role", "status");
+    hint.hidden = true;
+    const queue = document.createElement("div");
+    queue.id = "wordbook-queue";
+    queue.hidden = true;
+    card.append(hint, queue);
+    const panel = document.querySelector(".connection-panel");
+    let manage = null;
+    let count = null;
+    if (panel) {
+      manage = document.createElement("div");
+      manage.id = "wordbook-manage";
+      manage.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px";
+      count = document.createElement("span");
+      count.className = "helper";
+      count.textContent = "学习记录：0 个词";
+      const exportButton = document.createElement("button");
+      exportButton.type = "button";
+      exportButton.className = "text-button";
+      exportButton.textContent = "导出";
+      const clearButton = document.createElement("button");
+      clearButton.type = "button";
+      clearButton.className = "text-button";
+      clearButton.textContent = "清空";
+      const confirm = document.createElement("div");
+      confirm.id = "wordbook-confirm";
+      confirm.hidden = true;
+      confirm.style.cssText = "margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap";
+      const confirmText = document.createElement("span");
+      confirmText.className = "helper";
+      confirmText.textContent = "确定清空本机学习记录？";
+      const yes = document.createElement("button");
+      yes.type = "button";
+      yes.className = "text-button";
+      yes.textContent = "确认清空";
+      const no = document.createElement("button");
+      no.type = "button";
+      no.className = "text-button";
+      no.textContent = "取消";
+      confirm.append(confirmText, yes, no);
+      manage.append(count, exportButton, clearButton);
+      panel.append(manage, confirm);
+      exportButton.addEventListener("click", () => {
+        const text = JSON.stringify(readWordbook(), null, 2);
+        const name = `wordbook-${todayKey().replace(/-/g, "")}.json`;
+        if (window.NativeTTS && typeof window.NativeTTS.saveText === "function") {
+          window.NativeTTS.saveText(name, text);
+        } else {
+          const blob = new Blob([text], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = name;
+          link.click();
+          URL.revokeObjectURL(url);
+        }
+      });
+      clearButton.addEventListener("click", () => { confirm.hidden = false; });
+      no.addEventListener("click", () => { confirm.hidden = true; });
+      yes.addEventListener("click", () => {
+        try { window.localStorage.removeItem(WORDBOOK_KEY); } catch { /* ignore */ }
+        wordbookMemory = emptyWordbook();
+        confirm.hidden = true;
+        renderWordbookUi();
+      });
+    }
+    wordbookUi = { card, hint, queue, count };
+    wordsInput.addEventListener("input", () => renderWordbookUi());
+    const footer = document.querySelector(".footer > span");
+    if (footer && footer.textContent.includes("不保存学习历史")) {
+      footer.textContent = footer.textContent.replace("不保存学习历史", "学习记录只存在这台设备上");
+    }
+    renderWordbookUi();
+  }
+  function recordLessonWords(lesson) {
+    if (!lesson || !Array.isArray(lesson.targetWords)) return;
+    const wordbook = readWordbook();
+    const today = todayKey();
+    const now = new Date().toISOString();
+    const seen = new Set();
+    let changed = false;
+    lesson.targetWords.forEach((item) => {
+      if (!isValidTargetWord(item) || item.used === false) return;
+      const key = String(item.word || "").trim().toLowerCase();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      const zh = normalizeGlossText(item.glossZh);
+      if (!zh) return;
+      let record = wordbook.words[key];
+      let tag;
+      if (!record) {
+        record = {
+          word: key,
+          display: String(item.word),
+          zh,
+          firstAt: now,
+          lastAt: now,
+          times: 1,
+          stage: 0,
+          dueAt: addDaysToKey(today, REVIEW_INTERVALS[0]),
+        };
+        wordbook.words[key] = record;
+        tag = "新词";
+      } else {
+        record.zh = zh;
+        record.display = item.word || record.display;
+        record.lastAt = now;
+        record.times = (Number(record.times) || 0) + 1;
+        record.stage = Math.max(0, Math.min(6, Math.trunc(Number(record.stage)) || 0));
+        if (record.stage >= 6) {
+          tag = "复习";
+          record.dueAt = addDaysToKey(today, REVIEW_INTERVALS[6]);
+        } else if (String(record.dueAt || "") <= today) {
+          record.stage += 1;
+          tag = "复习";
+          record.dueAt = addDaysToKey(today, REVIEW_INTERVALS[record.stage]);
+        } else {
+          tag = "提前";
+          record.dueAt = addDaysToKey(today, REVIEW_INTERVALS[record.stage]);
+        }
+      }
+      item.reviewTag = tag;
+      changed = true;
+    });
+    if (changed) saveWordbook(wordbook);
+    renderWordbookUi();
+  }
+  function applyQuizPenalty(score, total) {
+    if (state.mode === "novel" || state.penaltyApplied || !state.generated) return;
+    state.penaltyApplied = true;
+    const questions = state.generated.questions || [];
+    const targets = (state.generated.targetWords || []).filter(isValidTargetWord);
+    const byKey = new Map(targets.map((item) => [String(item.word).toLowerCase(), item]));
+    const wordbook = readWordbook();
+    const today = todayKey();
+    let changed = false;
+    const downgrade = (key) => {
+      const record = wordbook.words[String(key || "").toLowerCase()];
+      const target = byKey.get(String(key || "").toLowerCase());
+      if (!record || !target || target.reviewTag === "新词") return;
+      record.stage = Math.max(0, (Number(record.stage) || 0) - 1);
+      record.dueAt = addDaysToKey(today, REVIEW_INTERVALS[record.stage]);
+      changed = true;
+    };
+    const wordQuestions = questions.filter((question) => typeof question.word === "string" && question.word.trim());
+    if (wordQuestions.length) {
+      questions.forEach((question, index) => {
+        if (!question || typeof question.word !== "string" || !question.word.trim()) return;
+        const selected = state.answers[index];
+        const answered = selected !== null && selected !== undefined && selected !== "";
+        if (!answered || Number(selected) !== question.correctOption) downgrade(question.word);
+      });
+    } else if (total > 0 && score / total < 0.6) {
+      targets.forEach((item) => {
+        if (item.reviewTag === "复习" || item.reviewTag === "提前") downgrade(item.word);
+      });
+    }
+    if (changed) saveWordbook(wordbook);
+    renderWordbookUi();
+  }
   // 目标词释义与全文点词朗读：新闻与小说共用；只操作 #result 内的 DOM。
   function isLookupCandidate(text) {
     const word = String(text || "").trim();
@@ -2476,7 +2816,7 @@
         : "";
       const invalid = !isValidTargetWord(item);
       const glossText = invalid ? "疑似非单词 · 已忽略" : (item.glossZh || "词义未提供");
-      return `<li><strong>${escapeHtml(item.word)}</strong> · ${escapeHtml(glossText)}${item.used === false && !invalid ? " · 未使用" : ""}${surfaceNote}</li>`;
+      return `<li><strong>${escapeHtml(item.word)}</strong> · ${escapeHtml(glossText)}${item.used === false && !invalid ? " · 未使用" : ""}${item.reviewTag ? `<span class="helper"> · ${escapeHtml(item.reviewTag)}</span>` : ""}${surfaceNote}</li>`;
     }).join("");
     const omittedMarkup = (lesson.uncoveredWords || []).length
       ? `<p class="coverage-warning" role="alert">本次文章未覆盖以下目标词：${(lesson.uncoveredWords || []).map(escapeHtml).join("、")}。它们已明确标记为未使用；本次未自动重试。</p>`
@@ -2563,7 +2903,7 @@
         : "";
       const invalid = !isValidTargetWord(item);
       const glossText = invalid ? "疑似非单词 · 已忽略" : (item.glossZh || "词义未提供");
-      return `<li><strong>${escapeHtml(item.word)}</strong> · ${escapeHtml(glossText)}${item.used === false && !invalid ? " · 未使用" : ""}${surfaceNote}</li>`;
+      return `<li><strong>${escapeHtml(item.word)}</strong> · ${escapeHtml(glossText)}${item.used === false && !invalid ? " · 未使用" : ""}${item.reviewTag ? `<span class="helper"> · ${escapeHtml(item.reviewTag)}</span>` : ""}${surfaceNote}</li>`;
     }).join("");
     const omittedMarkup = (lesson.uncoveredWords || []).length
       ? `<p class="coverage-warning" role="alert">本次文章未覆盖以下目标词：${(lesson.uncoveredWords || []).map(escapeHtml).join("、")}。它们已明确标记为未使用；本次未自动重试。</p>`
@@ -2675,6 +3015,7 @@
       scoreElement.textContent = `本地得分：${score}/${questions.length}`;
       scoreElement.className = `inline-state ${score === questions.length ? "success" : score === 0 ? "error" : ""}`.trim();
     }
+    applyQuizPenalty(score, questions.length);
   }
 
   function submitQuiz(event) {
@@ -3035,6 +3376,7 @@
   renderQuestionTypes();
   renderTargetPreview();
   tagStateMessage();
+  initWordbook();
   updateControls();
 })();
 

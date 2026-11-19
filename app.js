@@ -3365,6 +3365,7 @@
       novel: { length: 600, perThousand: Options.NOVEL_DENSITY.default },
       questionTypes: Options.DEFAULT_QUESTION_TYPES.slice(),
       translation: false,
+      autoSpeak: false,
       advanced: { model: PROVIDERS.deepseek.model, endpoint: PROVIDERS.deepseek.endpoint },
       updatedAt: "",
     };
@@ -3395,6 +3396,7 @@
     const types = Array.from(new Set(rawTypes));
     if (types.length >= Options.MIN_TYPES && types.length <= Options.MAX_TYPES) out.questionTypes = types;
     if (typeof raw.translation === "boolean") out.translation = raw.translation;
+    if (typeof raw.autoSpeak === "boolean") out.autoSpeak = raw.autoSpeak;
     const advanced = raw.advanced && typeof raw.advanced === "object" ? raw.advanced : {};
     const model = typeof advanced.model === "string" ? advanced.model.trim() : "";
     if (model) out.advanced.model = model.slice(0, 120);
@@ -3451,6 +3453,7 @@
     }
     out.questionTypes = state.questionTypes.slice();
     if ($("#translation")) out.translation = $("#translation").checked;
+    out.autoSpeak = Boolean($("#auto-speak") && $("#auto-speak").checked);
     const model = $("#model") ? $("#model").value.trim() : "";
     if (model) out.advanced.model = model.slice(0, 120);
     const endpoint = $("#endpoint") ? $("#endpoint").value.trim() : "";
@@ -3483,6 +3486,8 @@
     if ($("#novel-length")) $("#novel-length").value = String(next.novel.length);
     if ($("#novel-density")) $("#novel-density").value = String(next.novel.perThousand);
     if ($("#translation")) $("#translation").checked = next.translation;
+    if ($("#auto-speak")) $("#auto-speak").checked = next.autoSpeak;
+    autoSpeakEnabled = next.autoSpeak;
     if ($("#provider")) $("#provider").value = "deepseek";
     if ($("#model")) $("#model").value = next.advanced.model;
     if ($("#endpoint")) {
@@ -4052,6 +4057,7 @@
   $("#translation").addEventListener("change", writeSettings);
   $("#auto-speak")?.addEventListener("change", (event) => {
     autoSpeakEnabled = event.target.checked;
+    writeSettings();
   });
   // 「清空本页」在设置·学习记录里，先展开二次确认再执行，避免误触丢文章与答案。
   $("#clear-button")?.addEventListener("click", () => {

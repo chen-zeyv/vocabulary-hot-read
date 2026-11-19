@@ -97,6 +97,10 @@
   let imageEpoch = 0;
   // 模式切换或清空本页时递增；迟到的 Search / Fetch / Chat 响应据此丢弃。
   let sessionEpoch = 0;
+  // 正在进行的生成请求：返回时先确认，确认取消后 abort 掉。
+  let activeGeneration = null;
+  let generationCancelOpen = false;
+  let generationCancelPushed = false;
 
   function resetArticleImageState() {
     imageEpoch += 1;
@@ -1269,9 +1273,15 @@
     return `请求失败：${error?.message || "未知网络错误"}。输入仍保留；本次操作不会自动重试。`;
   }
 
-  async function postJson(url, key, body, timeout = 45000) {
+  async function postJson(url, key, body, timeout = 45000, signal) {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), timeout);
+    // H5：把生成请求的取消信号接到返回链路。
+    const relayAbort = () => controller.abort();
+    if (signal) {
+      if (signal.aborted) controller.abort();
+      else signal.addEventListener("abort", relayAbort, { once: true });
+    }
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -1297,6 +1307,7 @@
       return payload;
     } finally {
       window.clearTimeout(timer);
+      if (signal) signal.removeEventListener("abort", relayAbort);
     }
   }
 
@@ -1795,6 +1806,8 @@
     const epoch = sessionEpoch;
     // 记录发起生成时所在的步骤：请求期间用户若已退层，就不再强行拉回。
     const stepAtRequest = currentWizardStep();
+    const generationTicket = { controller: new AbortController(), epoch, step: stepAtRequest, revisionMode, strictCoverage };
+    activeGeneration = generationTicket;
     if (strictCoverage) {
       state.novel.strictRewriteUsed = true;
       state.novel.strictRewritePending = true;
@@ -1810,7 +1823,8 @@
     renderResult();
     updateControls();
     try {
-      const payload = await postJson(endpoint, key, body);
+      const payload = await postJson(endpoint, key, body, 45000, generationTicket.controller.signal);
+      if (generationTicket.controller.signal.aborted) return;
       if (epoch !== sessionEpoch) return;
       const stopReason = readFinishReasonMessage(payload);
       // 整章档：finish_reason=length 时仍尝试解析已返回内容，由覆盖提示条标注「输出可能不完整」。
@@ -1867,6 +1881,18 @@
       renderResult();
       if (hasNovelArticle() && currentWizardStep() === stepAtRequest) setWizardStep(2);
     } catch (error) {
+      // 用户确认取消：保留已有译文，不报错、不改步、不消耗修订/重写机会。
+      if (generationTicket.controller.signal.aborted) {
+        state.generationAttempted = false;
+        state.generationError = "";
+        state.generationRaw = "";
+        if (revisionMode) state.revisionUsed = false;
+        if (strictCoverage) state.novel.strictRewriteUsed = false;
+        state.novel.strictRewritePending = false;
+        setState("#generation-state", "已取消本次生成。");
+        renderResult();
+        return;
+      }
       if (epoch !== sessionEpoch) return;
       const detail = classifyError(error, error.response);
       const providerDetail = redactSecret(readProviderErrorMessage(error.payload), key);
@@ -1877,6 +1903,7 @@
       // 失败时回到选章节阶段，保留章节与输入；用户已离开原步骤则只留错误信息，不强行改步。
       if (currentWizardStep() === stepAtRequest) setWizardStep(1, { fromUser: true });
     } finally {
+      if (activeGeneration === generationTicket) activeGeneration = null;
       if (strictCoverage && epoch === sessionEpoch && state.novel.strictRewritePending) {
         state.novel.strictRewritePending = false;
         if (state.mode === "novel") renderResult();
@@ -1997,6 +2024,8 @@
     const epoch = sessionEpoch;
     // 记录发起生成时所在的步骤：请求期间用户若已退层，就不再强行拉回。
     const stepAtRequest = currentWizardStep();
+    const generationTicket = { controller: new AbortController(), epoch, step: stepAtRequest, revisionMode };
+    activeGeneration = generationTicket;
     state.generationAttempted = true;
     state.penaltyApplied = false;
     state.submitted = false;
@@ -2008,7 +2037,8 @@
     renderResult();
     updateControls();
     try {
-      const payload = await postJson(endpoint, key, body);
+      const payload = await postJson(endpoint, key, body, 45000, generationTicket.controller.signal);
+      if (generationTicket.controller.signal.aborted) return;
       if (epoch !== sessionEpoch) return;
       const stopReason = readFinishReasonMessage(payload);
       if (stopReason) {
@@ -2047,6 +2077,17 @@
         loadArticleImage(candidate).catch(() => {});
       }
     } catch (error) {
+      // 用户确认取消：不报错、不回填、不改步、不消耗修订次数。
+      if (generationTicket.controller.signal.aborted) {
+        state.generationAttempted = false;
+        state.generationError = "";
+        state.generationRaw = "";
+        state.incompleteAccepted = false;
+        if (revisionMode) state.revisionUsed = false;
+        setState("#generation-state", "已取消本次生成。");
+        renderResult();
+        return;
+      }
       if (epoch !== sessionEpoch) return;
       const detail = classifyError(error, error.response);
       const providerDetail = redactSecret(readProviderErrorMessage(error.payload), key);
@@ -2056,6 +2097,7 @@
       // 失败时回到选热点阶段，保留已选候选与输入；用户已离开原步骤则只留错误信息，不强行改步。
       if (currentWizardStep() === stepAtRequest) setWizardStep(1, { fromUser: true });
     } finally {
+      if (activeGeneration === generationTicket) activeGeneration = null;
       updateControls();
     }
   }
@@ -2101,6 +2143,10 @@
     element.textContent = message || "";
     element.className = `inline-state speech-state${type ? ` ${type}` : ""}`;
   }
+
+  // H6：默认静音，点词只开气泡；设置里打开后才恢复点词即读（会话级，不落盘）。
+  let autoSpeakEnabled = false;
+  const SPEAK_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M11 5 6.5 9H3v6h3.5L11 19V5Z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M15.5 9.5a4 4 0 0 1 0 5M18.5 7a7.5 7.5 0 0 1 0 10"/></svg>';
 
   function speakWord(word) {
     const text = String(word || "").trim();
@@ -2421,14 +2467,14 @@
       wordbookUi.queue.hidden = false;
       const typedWords = new Set(parseWordList(wordsInput.value).words.map((word) => word.toLowerCase()));
       wordbookUi.queue.innerHTML = `
-        <div class="wordbook-summary" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px">
+        <div class="wordbook-summary">
           <strong>今日到期 ${due.length} 个</strong>
           <button class="text-button" id="wordbook-add-all" type="button">全部加入</button>
         </div>
-        <div class="wordbook-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+        <div class="wordbook-chips">
           ${active.map((item) => {
             const added = typedWords.has(item.word);
-            return `<span class="wordbook-due-item"><button class="wordbook-chip" type="button" data-word="${escapeHtml(item.word)}" data-added="${added ? "true" : "false"}" aria-pressed="${added ? "true" : "false"}"><b>${escapeHtml(item.display)}</b> · ${escapeHtml(item.zh)}</button><span class="wordbook-due-sep" aria-hidden="true"></span><button class="wordbook-delay" type="button" data-delay="${escapeHtml(item.word)}" aria-label="顺延 ${escapeHtml(item.word)}">顺延</button></span>`;
+            return `<span class="wordbook-due-item"><button class="wordbook-chip" type="button" data-word="${escapeHtml(item.word)}" data-added="${added ? "true" : "false"}" aria-pressed="${added ? "true" : "false"}"><b>${escapeHtml(item.display)}</b> · ${escapeHtml(item.zh)}</button><span class="wordbook-due-sep" aria-hidden="true"></span><button class="wordbook-delay" type="button" data-delay="${escapeHtml(item.word)}" aria-label="顺延 ${escapeHtml(item.word)}"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="10" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 8.5v3.8l2.5 1.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M17.5 17h5M20 14.5v5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span class="wordbook-delay-label">+1</span></button></span>`;
           }).join("")}
         </div>
         ${rest > 0 ? `<p class="helper">这次没排上（还有 ${rest} 个）</p>` : ""}`;
@@ -2487,17 +2533,16 @@
     if (panel) {
       manage = document.createElement("div");
       manage.id = "wordbook-manage";
-      manage.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px";
       count = document.createElement("span");
       count.className = "helper";
       count.textContent = "学习记录：0 个词";
       const exportButton = document.createElement("button");
       exportButton.type = "button";
-      exportButton.className = "text-button";
+      exportButton.className = "text-button wordbook-export";
       exportButton.textContent = "导出";
       const clearButton = document.createElement("button");
       clearButton.type = "button";
-      clearButton.className = "text-button";
+      clearButton.className = "text-button wordbook-clear danger-text";
       clearButton.textContent = "清空";
       const confirm = document.createElement("div");
       confirm.id = "wordbook-confirm";
@@ -2699,7 +2744,21 @@
     function renderSharedPopover(glossaryZh) {
       if (!sharedPopover) return;
       sharedPopover.replaceChildren();
+      const head = document.createElement("div");
+      head.className = "gloss-head";
+      const wordLabel = document.createElement("b");
+      wordLabel.className = "gloss-word";
+      wordLabel.textContent = sharedWord;
+      const speakButton = document.createElement("button");
+      speakButton.type = "button";
+      speakButton.className = "gloss-speak";
+      speakButton.setAttribute("aria-label", `朗读 ${sharedWord}`);
+      speakButton.innerHTML = SPEAK_ICON;
+      speakButton.addEventListener("click", () => speakWord(sharedWord));
+      head.append(wordLabel, speakButton);
+      sharedPopover.append(head);
       const message = document.createElement("span");
+      message.className = "gloss-meaning";
       const key = sharedWord.toLowerCase();
       let known = glossaryZh || "";
       if (!known && state.lookupCache.has(key)) known = state.lookupCache.get(key) || "";
@@ -2731,29 +2790,35 @@
       const close = document.createElement("button");
       close.type = "button";
       close.className = "text-button gloss-close";
-      close.textContent = "关闭";
+      close.textContent = "知道了";
       close.style.display = "block";
       close.style.marginTop = "4px";
       close.addEventListener("click", closeSharedPopover);
       sharedPopover.append(close);
     }
-    async function lookupSharedWord(key) {
+    // 只改释义行，不能碰气泡头部的词形与朗读按钮。
+  function setSharedMessage(text) {
+    if (!sharedPopover) return;
+    const message = sharedPopover.querySelector(".gloss-meaning");
+    if (message) message.textContent = text;
+  }
+  async function lookupSharedWord(key) {
       if (!key || state.lookupCount >= 30 || state.lookupPending.has(key) || state.lookupCache.has(key) || state.lookupFailed.has(key)) return;
       let endpoint;
       try {
         endpoint = validateEndpoint($("#endpoint").value.trim());
       } catch (error) {
-        if (sharedPopover) sharedPopover.firstChild.textContent = error.message;
+        if (sharedPopover) setSharedMessage(error.message);
         return;
       }
       if (endpoint !== "https://api.deepseek.com/chat/completions") {
-        if (sharedPopover) sharedPopover.firstChild.textContent = "当前版本仅支持 DeepSeek 官方 Chat Completions 地址。";
+        if (sharedPopover) setSharedMessage("当前版本仅支持 DeepSeek 官方 Chat Completions 地址。");
         return;
       }
       const keyValue = $("#api-key").value.trim();
       const model = $("#model").value.trim();
       if (!keyValue || !model) {
-        if (sharedPopover) sharedPopover.firstChild.textContent = "请先在设置·连接里填写 DeepSeek API Key 与模型 ID。";
+        if (sharedPopover) setSharedMessage("请先在设置·连接里填写 DeepSeek API Key 与模型 ID。");
         return;
       }
       state.lookupCount += 1;
@@ -2800,6 +2865,16 @@
       detail.setAttribute("role", "status");
       detail.hidden = true;
       detail.textContent = isValidTargetWord(target) ? target.glossZh : "疑似非单词 · 已忽略";
+      const inlineSpeak = document.createElement("button");
+      inlineSpeak.type = "button";
+      inlineSpeak.className = "gloss-speak gloss-speak-inline";
+      inlineSpeak.setAttribute("aria-label", `朗读 ${target.word}`);
+      inlineSpeak.innerHTML = SPEAK_ICON;
+      inlineSpeak.addEventListener("click", (event) => {
+        event.stopPropagation();
+        speakWord(target.word);
+      });
+      detail.append(inlineSpeak);
       mark.tabIndex = 0;
       mark.setAttribute("role", "button");
       mark.setAttribute("aria-expanded", "false");
@@ -2810,15 +2885,16 @@
         const open = mark.getAttribute("aria-expanded") !== "true";
         mark.setAttribute("aria-expanded", String(open));
         detail.hidden = !open;
+        if (open) mark.dataset.viewed = "1";
       };
       mark.addEventListener("click", () => {
-        speakWord(mark.textContent);
+        if (autoSpeakEnabled) speakWord(mark.textContent);
         toggleGloss();
       });
       mark.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          speakWord(mark.textContent);
+          if (autoSpeakEnabled) speakWord(mark.textContent);
           toggleGloss();
         }
         if (event.key === "Escape") { mark.setAttribute("aria-expanded", "false"); detail.hidden = true; }
@@ -2828,9 +2904,9 @@
     // 非目标词：先查生词表（小写匹配），命中显示中文，否则「暂无释义」+ 按需查义。
     resultElement.querySelectorAll(".article-word").forEach((wordElement) => {
       wordElement.setAttribute("role", "button");
-      wordElement.setAttribute("aria-label", `朗读 ${wordElement.textContent}`);
+      wordElement.setAttribute("aria-label", `查看 ${wordElement.textContent} 的释义`);
       wordElement.addEventListener("click", () => {
-        speakWord(wordElement.textContent);
+        if (autoSpeakEnabled) speakWord(wordElement.textContent);
         const surface = wordElement.textContent.trim();
         if (!isLookupCandidate(surface)) return;
         const key = surface.toLowerCase();
@@ -3008,8 +3084,8 @@
       <section class="result-panel">
         <p class="result-kicker">${escapeHtml(novelKicker())}</p>
         ${state.generationError ? `<p class="coverage-warning" role="alert">${escapeHtml(state.generationError)}</p>` : ""}
-        <h2>英文学习版 <span class="article-actions"><button class="text-button" id="copy-article" type="button">复制全文</button><button class="text-button" id="export-article" type="button">导出 .md</button></span></h2>
-        <p class="speech-hint">点任意单词可以听发音。目标词还可以点开中文释义。</p>
+        <h2>英文学习版 <details class="article-menu"><summary aria-label="更多操作" title="更多操作">…</summary><div class="article-menu-panel"><button class="text-button" id="copy-article" type="button">复制全文</button><button class="text-button" id="export-article" type="button">导出 .md</button></div></details></h2>
+        <p class="speech-hint">点任意单词查看释义；点气泡里的朗读按钮听发音。</p>
         <span id="speech-state" class="inline-state speech-state" role="status" aria-live="polite"></span>
         ${sourceLine}
         <div class="article-body">${renderArticle(lesson.article, targetWords)}</div>
@@ -3095,9 +3171,15 @@
         : "";
       return `<div class="quiz-question" data-question="${index}"><h3>${index + 1}. ${escapeHtml(question.prompt)}</h3>${options}${answer}</div>`;
     }).join("");
+    const quizScore = state.submitted
+      ? lesson.questions.reduce((sum, question, index) => sum + (Number(state.answers[index]) === question.correctOption ? 1 : 0), 0)
+      : 0;
+    const resultCard = state.submitted
+      ? `<div class="quiz-result-card"><p class="quiz-score"><b>${quizScore}</b><span>/${lesson.questions.length}</span></p><p class="quiz-score-note">${quizScore === lesson.questions.length ? `${lesson.questions.length} 题全对` : `答对 ${quizScore} 题 · 共 ${lesson.questions.length} 题`}</p><span class="quiz-review-pill" id="quiz-review-pill"></span></div>`
+      : "";
     const quizPanel = lesson.uncoveredWords.length && !state.incompleteAccepted
       ? ""
-      : `<section class="result-panel"><p class="result-kicker">浏览器本地判分</p><h2>检查理解</h2><form id="quiz-form"><div class="quiz-list">${questions}</div><div class="button-row">${state.submitted ? "" : `<button class="button primary" id="submit-quiz" type="submit">提交答案并查看解析</button>`}<span id="quiz-progress" class="inline-state" role="status"></span><span id="quiz-score" class="inline-state" role="status"></span></div></form></section>`;
+      : `<section class="result-panel">${resultCard}<p class="result-kicker">浏览器本地判分</p><h2>检查理解</h2><form id="quiz-form"><div class="quiz-list">${questions}</div><div class="button-row"><span id="quiz-progress" class="inline-state" role="status"></span><span id="quiz-score" class="inline-state" role="status"></span></div></form></section>`;
     const incompletePanel = lesson.uncoveredWords.length && !state.incompleteAccepted
       ? `<section class="result-panel incomplete-actions"><p class="result-kicker">文章尚未完成</p><h2>目标词没有全部出现</h2><p>练习暂不可用。你可以确认后请求一次修订，或接受当前文章并继续。</p><div class="button-row"><button class="button primary" id="revise-button" type="button" ${state.revisionUsed ? "disabled" : ""}>确认修订一次</button><button class="button secondary" id="accept-incomplete" type="button">接受当前文章</button></div><p class="helper">${state.revisionUsed ? "已使用一次修订机会；不会再次发送请求。" : "修订会额外发送一次请求，可能产生费用。只有确认后才会发送。"}</p></section>`
       : "";
@@ -3110,10 +3192,10 @@
       : "";    // 阅读块写进 03 屏容器，练习块写进 04 屏容器；renderResult 仍是唯一入口。
     resultElement.innerHTML = `
       <section class="result-panel">
-        <p class="result-kicker">基于检索摘要生成 · 不是新闻原文</p>
+        <p class="result-kicker">已按候选生成 · 非新闻原文</p>
         ${state.generationError ? `<p class="coverage-warning" role="alert">${escapeHtml(state.generationError)}</p>` : ""}
-        <h2>阅读文章 <span class="article-actions"><button class="text-button" id="copy-article" type="button">复制全文</button><button class="text-button" id="export-article" type="button">导出 .md</button></span></h2>
-        <p class="speech-hint">点任意单词可以听发音。目标词还可以点开中文释义。</p>
+        <h2>阅读文章 <details class="article-menu"><summary aria-label="更多操作" title="更多操作">…</summary><div class="article-menu-panel"><button class="text-button" id="copy-article" type="button">复制全文</button><button class="text-button" id="export-article" type="button">导出 .md</button></div></details></h2>
+        <p class="speech-hint">点任意单词查看释义；点气泡里的朗读按钮听发音。</p>
         <span id="speech-state" class="inline-state speech-state" role="status" aria-live="polite"></span>
         <p class="helper">来源：${escapeHtml(candidate.sourceName)} · 发布日期：${escapeHtml(candidate.publishedAt || "日期未知")} · 检索日期：${escapeHtml(state.searchTime)}</p>
         <div class="article-body">${renderArticle(lesson.article, targetWords)}</div>
@@ -3127,15 +3209,20 @@
       resultQuizElement.innerHTML = quizPanel;
       resultQuizElement.hidden = !quizPanel;
     }
+    // 未判分：吸底提交条；判分后：出口条。两者互斥。
+    const submitBar = $("#quiz-submit-bar");
+    if (submitBar) submitBar.hidden = !quizPanel || state.submitted;
     // 判分后给出口：回到阅读 / 再练一次；未判分不占位。
     const quizActions = $("#quiz-actions");
     if (quizActions) {
       const showQuizActions = Boolean(quizPanel) && state.submitted;
       quizActions.hidden = !showQuizActions;
       const note = $("#quiz-actions-note");
-      if (note) {
+      if (note) note.textContent = "";
+      const pill = $("#quiz-review-pill");
+      if (pill) {
         const reviewed = targetWords.filter((item) => isValidTargetWord(item) && item.used !== false).length;
-        note.textContent = showQuizActions && reviewed ? `已加入今日复习 · ${reviewed} 个词` : "";
+        pill.textContent = showQuizActions && reviewed ? `已加入今日复习 · ${reviewed} 个词` : "";
       }
     }
     wireArticleInteractions(targetWords);
@@ -3144,6 +3231,7 @@
     wireArticleImage();
     $("#quiz-form")?.addEventListener("submit", submitQuiz);
     $("#quiz-form")?.addEventListener("change", updateQuizProgress);
+    $("#submit-quiz")?.addEventListener("click", submitQuiz);
     if (!state.submitted) updateQuizProgress();
     $("#revise-button")?.addEventListener("click", () => {
       if (!navigator.onLine) {
@@ -3163,15 +3251,30 @@
     updateWizardControls();
   }
 
-  function updateQuizProgress() {
-    const element = $("#quiz-progress");
-    if (!element || !state.generated) return;
-    const total = state.generated.questions.length;
-    const answered = state.generated.questions.reduce((count, _, index) => (
-      count + (document.querySelector(`input[name="q${index}"]:checked`) ? 1 : 0)
+  function unansweredCount() {
+    if (!state.generated) return 0;
+    return state.generated.questions.reduce((count, _, index) => (
+      count + (document.querySelector(`input[name="q${index}"]:checked`) ? 0 : 1)
     ), 0);
-    element.textContent = answered === total ? `已作答 ${total}/${total} 题` : `还有 ${total - answered} 题未作答`;
-    element.className = "inline-state";
+  }
+
+  function updateQuizProgress() {
+    if (!state.generated) return;
+    const total = state.generated.questions.length;
+    const rest = unansweredCount();
+    const text = rest === 0 ? "可以提交了" : `还剩 ${rest} 题未答`;
+    const element = $("#quiz-progress");
+    if (element) {
+      element.textContent = text;
+      element.className = "inline-state";
+    }
+    const status = $("#quiz-submit-status");
+    if (status) {
+      status.textContent = text;
+      status.className = "step-status";
+    }
+    const submit = $("#submit-quiz");
+    if (submit) submit.setAttribute("aria-disabled", rest === 0 ? "false" : "true");
   }
 
   function showAnswers() {
@@ -3202,6 +3305,17 @@
   function submitQuiz(event) {
     event.preventDefault();
     if (state.submitted || !state.generated) return;
+    if (unansweredCount() > 0) {
+      // 未答完不提交：先刷新文案，再加上抖动类（updateQuizProgress 会重写 className）。
+      updateQuizProgress();
+      const status = $("#quiz-submit-status");
+      if (status) {
+        status.classList.remove("shake");
+        void status.offsetWidth;
+        status.classList.add("shake");
+      }
+      return;
+    }
     state.answers = Object.fromEntries(state.generated.questions.map((_, index) => {
       const selected = document.querySelector(`input[name="q${index}"]:checked`);
       return [index, selected ? selected.value : null];
@@ -3499,7 +3613,60 @@
     updateControls();
   }
 
-  // 返回栈分层：设置页 → 词气泡 → 上一步骤；01 上再返回才交给系统退出。
+  // 生成中返回确认面板：确认取消后 abort 请求并退回上一步。
+  const genCancelDialog = $("#gen-cancel-dialog");
+  const genCancelWait = $("#gen-cancel-wait");
+  const genCancelAbort = $("#gen-cancel-abort");
+
+  function openGenerationCancelDialog() {
+    if (!genCancelDialog) return;
+    generationCancelOpen = true;
+    genCancelDialog.hidden = false;
+    document.body.classList.add("dialog-open");
+    genCancelWait?.focus({ preventScroll: true });
+  }
+
+  function closeGenerationCancelDialog() {
+    if (!genCancelDialog || !generationCancelOpen) return;
+    genCancelDialog.hidden = true;
+    document.body.classList.remove("dialog-open");
+    generationCancelOpen = false;
+  }
+
+  function abortGenerationAndBack() {
+    const ticket = activeGeneration;
+    if (ticket) {
+      ticket.controller.abort();
+      activeGeneration = null;
+    }
+    closeGenerationCancelDialog();
+    const target = Math.max(0, historyStep - 1);
+    if (generationCancelPushed) {
+      generationCancelPushed = false;
+      setWizardStep(target, { fromUser: true });
+    } else {
+      // 历史补位失败时直接切屏，避免一次返回把页面退出。
+      historyStep = target;
+      setWizardStep(target, { fromHistory: true });
+    }
+  }
+
+  if (genCancelDialog) {
+    genCancelDialog.addEventListener("click", (event) => {
+      if (event.target === genCancelDialog) closeGenerationCancelDialog();
+    });
+    genCancelDialog.addEventListener("keydown", (event) => {
+      if (!generationCancelOpen) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeGenerationCancelDialog();
+      }
+    });
+    genCancelWait?.addEventListener("click", () => closeGenerationCancelDialog());
+    genCancelAbort?.addEventListener("click", abortGenerationAndBack);
+  }
+
+  // 返回栈分层：设置页 → 词气泡 → 生成确认 → 上一步骤；01 上再返回才交给系统退出。
   window.addEventListener("popstate", (event) => {
     if (settingsOpen) {
       finishCloseSettings();
@@ -3513,6 +3680,28 @@
     const entryState = event.state || {};
     // 设置/气泡记录本身不是步骤，即使带着 vhStep 也不改步骤。
     if (entryState.settings || entryState.gloss) return;
+    if (generationCancelOpen) {
+      // 连按返回：先关确认面板并留在当前步骤。
+      closeGenerationCancelDialog();
+      try {
+        history.pushState({ vhStep: historyStep }, "");
+        generationCancelPushed = true;
+      } catch { /* ignore */ }
+      return;
+    }
+    if (activeGeneration && !activeGeneration.controller.signal.aborted) {
+      const targetStep = typeof entryState.vhStep === "number" ? entryState.vhStep : 0;
+      if (targetStep < historyStep) {
+        // 浏览器已退回一条：补回原步骤留在原地，先问一次再决定是否取消。
+        generationCancelPushed = false;
+        try {
+          history.pushState({ vhStep: historyStep }, "");
+          generationCancelPushed = true;
+        } catch { /* ignore */ }
+        openGenerationCancelDialog();
+        return;
+      }
+    }
     if (typeof entryState.vhStep === "number") {
       historyStep = entryState.vhStep;
       setWizardStep(entryState.vhStep, { fromHistory: true });
@@ -3847,6 +4036,9 @@
   $("#model").addEventListener("change", writeSettings);
   $("#endpoint").addEventListener("change", writeSettings);
   $("#translation").addEventListener("change", writeSettings);
+  $("#auto-speak")?.addEventListener("change", (event) => {
+    autoSpeakEnabled = event.target.checked;
+  });
   // 「清空本页」在设置·学习记录里，先展开二次确认再执行，避免误触丢文章与答案。
   $("#clear-button")?.addEventListener("click", () => {
     const confirm = $("#clear-confirm");

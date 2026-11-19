@@ -476,6 +476,55 @@ body.settings-open { overflow:hidden; }
   .settings-foot { padding-left:16px; padding-right:16px; }
   .settings-button { width:44px; height:44px; }
 }
+/* ===== v44：文字按钮命中区、气泡朗读、03 更多菜单、队列、04 结果卡 ===== */
+.text-button { display:inline-flex; align-items:center; min-height:44px; padding:8px 0; }
+.target-word { border-bottom-width:2px; }
+.target-word[data-viewed="1"] { border-bottom-style:dashed; }
+.gloss-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 0 4px; }
+.gloss-word { color:#1E2A33; font-size:18px; line-height:24px; }
+.gloss-speak { display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; min-height:44px; padding:0; border:0; border-radius:10px; background:#F1EADA; color:#195C92; cursor:pointer; }
+.gloss-speak:hover { background:#E9DFC8; }
+.gloss-speak:focus-visible { outline:2px solid #195C92; outline-offset:2px; }
+.gloss-speak-inline { position:relative; width:24px; height:24px; min-height:24px; margin-left:4px; border-radius:6px; vertical-align:middle; }
+.gloss-speak-inline::after { content:""; position:absolute; left:-10px; right:-10px; top:-10px; bottom:-10px; }
+.gloss-speak-inline svg { width:16px; height:16px; }
+.article-menu { position:relative; display:inline-block; margin-left:8px; vertical-align:middle; }
+.article-menu > summary { display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:10px; background:#F1EADA; color:#4A453D; font-size:18px; font-weight:700; list-style:none; cursor:pointer; }
+.article-menu > summary::-webkit-details-marker { display:none; }
+.article-menu[open] > summary { background:#E9DFC8; }
+.article-menu-panel { position:absolute; right:0; top:48px; z-index:12; display:flex; flex-direction:column; min-width:144px; padding:4px 12px; border-radius:12px; background:#FFFCF6; box-shadow:0 8px 24px rgba(31,42,51,.16); }
+.article-menu-panel .text-button { justify-content:flex-start; width:100%; }
+.wordbook-summary { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:10px; }
+.wordbook-chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+#wordbook-manage { display:flex; align-items:center; gap:24px; flex-wrap:wrap; margin-top:12px; }
+.wordbook-clear { color:#B4472F; }
+.wordbook-delay { justify-content:center; min-width:44px; min-height:44px; }
+.wordbook-delay-label { margin-left:2px; }
+@media (max-width:360px) {
+  .wordbook-chips { display:grid; grid-template-columns:repeat(2, minmax(120px, 1fr)); gap:6px 8px; }
+  .wordbook-due-item { position:relative; padding-right:52px; }
+  .wordbook-due-sep { display:none; }
+  .wordbook-delay { position:absolute; right:0; top:0; width:44px; height:44px; }
+  .wordbook-delay-label { display:none; }
+}
+.quiz-submit-bar { display:flex; align-items:center; gap:12px; margin:12px 0 6px; }
+.quiz-submit-bar[hidden] { display:none !important; }
+.quiz-submit-bar .step-status { flex:1 1 auto; min-height:18px; color:#6E6558; font-size:12px; }
+.quiz-submit-bar .button { flex:0 0 auto; min-width:180px; }
+.quiz-submit-bar .button[aria-disabled="true"] { background:#F1EADA; color:#6E6558; }
+.quiz-result-card { margin:0 0 18px; }
+.quiz-score { margin:0; color:#1F6B57; font-size:34px; line-height:1; font-weight:700; }
+.quiz-score span { margin-left:2px; color:#5B7A6D; font-size:15px; font-weight:600; }
+.quiz-score-note { margin:6px 0 0; color:#6E6558; font-size:13px; }
+.quiz-review-pill { display:inline-flex; align-items:center; min-height:28px; margin-top:10px; padding:0 12px; border-radius:999px; background:#E4F2EC; color:#1F6B57; font-size:12.5px; font-weight:600; }
+.quiz-review-pill:empty { display:none; }
+.shake { animation:vh-shake .4s ease; }
+@keyframes vh-shake {
+  0%, 100% { transform:translateX(0); }
+  25% { transform:translateX(-4px); }
+  50% { transform:translateX(4px); }
+  75% { transform:translateX(-3px); }
+}
 @media (min-width:1180px) {
   .wizard-pane[data-wizard-pane="0"] > .key-panel { grid-column:1; grid-row:2; margin-bottom:8px; }
 }

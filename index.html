@@ -167,6 +167,10 @@
       </form>
       <div class="wizard-pane" data-wizard-pane="3" hidden>
         <section id="result-quiz" class="quiz-section" aria-live="polite"></section>
+        <div id="quiz-submit-bar" class="step-actions quiz-submit-bar" hidden>
+          <span id="quiz-submit-status" class="step-status" role="status" aria-live="polite"></span>
+          <button id="submit-quiz" class="button primary" type="button" aria-disabled="true">提交答案</button>
+        </div>
         <div id="quiz-actions" class="step-actions quiz-actions" hidden>
           <span id="quiz-actions-note" class="step-status" role="status" aria-live="polite"></span>
           <div class="quiz-action-buttons">
@@ -175,7 +179,7 @@
           </div>
         </div>
       </div>
-      <footer class="footer"><span>词汇热读 v1.0.0 · 设置与学习记录只存在这台设备；密钥、文章和答案刷新或关闭即清除。</span></footer>
+      <footer class="footer"><span>词汇热读 v1.0.0 · 设置与学习记录只存在这台设备；密钥、文章和答案刷新或关闭即清除。『清空本页』已移到设置 · 学习记录。</span></footer>
     </main>
 
     <!-- 设置页：放在 #lesson-form 之外，避免「清空本页」的 form.reset() 把设置打回默认。 -->
@@ -205,6 +209,7 @@
               <div id="novel-density-field" hidden><label class="field-label" for="novel-density">每千词目标词数</label><input id="novel-density" type="range" min="6" max="32" step="2" value="20" /><output id="novel-density-value" class="helper" for="novel-density">每千词 20 个</output></div>
             </div>
             <label class="toggle-row"><input id="translation" type="checkbox" /><span><b>生成中文全文翻译</b><small>默认关闭，会增加发送内容和模型费用</small></span></label>
+            <label class="toggle-row"><input id="auto-speak" type="checkbox" /><span><b>点词自动朗读</b><small>默认关闭；打开后点任意单词直接发音</small></span></label>
           </section>
           <section class="settings-section" id="settings-practice">
             <h3>练习</h3>
@@ -294,6 +299,19 @@
         <div class="button-row">
           <button class="button primary" id="revision-confirm" type="button">确认发送修订</button>
           <button class="button secondary" id="revision-cancel" type="button">取消</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- 生成中返回确认：确认取消后中止本次请求并退回上一步。 -->
+    <div id="gen-cancel-dialog" class="dialog-backdrop" hidden>
+      <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="gen-cancel-title" aria-describedby="gen-cancel-desc">
+        <p class="result-kicker">正在生成</p>
+        <h2 id="gen-cancel-title">还要继续等待吗？</h2>
+        <p id="gen-cancel-desc">正在生成，返回会取消本次请求。</p>
+        <div class="button-row">
+          <button class="button primary" id="gen-cancel-wait" type="button">继续等待</button>
+          <button class="button secondary" id="gen-cancel-abort" type="button">取消并返回</button>
         </div>
       </section>
     </div>

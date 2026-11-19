@@ -3420,7 +3420,7 @@
     settingsClosing = false;
     settingsHistoryEntry = true;
     try {
-      history.pushState({ settings: true, vhStep: historyStep }, "", "#settings");
+      history.pushState({ settings: true, vhStep: historyStep, gloss: glossHistoryOpen ? 1 : 0 }, "", "#settings");
     } catch {
       settingsHistoryEntry = false;
     }
@@ -3467,7 +3467,9 @@
       return;
     }
     const stale = history.state || {};
-    const staleDepth = stale.settings && typeof stale.vhStep === "number" ? stale.vhStep + 1 : 0;
+    const staleDepth = stale.settings && typeof stale.vhStep === "number"
+      ? stale.vhStep + 1 + (stale.gloss === 1 ? 1 : 0)
+      : 0;
     finishCloseSettings();
     if (staleDepth > 0) {
       try { history.go(-staleDepth); } catch { /* ignore */ }
@@ -3601,7 +3603,9 @@
     if (settingsOpen) {
       const currentState = history.state || {};
       if (settingsHistoryEntry) staleEntries += 1;
-      else if (currentState.settings && typeof currentState.vhStep === "number") staleEntries = currentState.vhStep + 1;
+      else if (currentState.settings && typeof currentState.vhStep === "number") {
+        staleEntries = currentState.vhStep + 1 + (currentState.gloss === 1 ? 1 : 0);
+      }
       settingsHistoryEntry = false;
       finishCloseSettings();
     }

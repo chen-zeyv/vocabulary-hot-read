@@ -386,8 +386,8 @@
     const translate = data.translate === true;
     const outputSchema = {
       article: "English learning-version chapter as plain text",
-      targetWords: [{ word: "exact target word", glossZh: "简短中文词义" }],
-      glossary: [{ word: "subsidy", zh: "补贴" }],
+      targetWords: [{ word: "exact target word", glossZh: "简短中文词义", ipa: "英式音标，不含斜杠" }],
+      glossary: [{ word: "subsidy", zh: "补贴", ipa: "ˈsʌbsədi" }],
       uncoveredWords: ["target words left out because natural usage was not possible"],
       translation: translate ? "Chinese full translation" : null,
     };
@@ -398,7 +398,7 @@
     const bookTitle = String(data.bookTitle || "").trim();
     const chapterLabel = String(data.chapterLabel || "").trim();
     const chapterDirection = safeLength >= 1500 ? "This is a whole-chapter request: cover the beginning, the rising action, the turning point and the ending of the supplied chapter. Do not skip scenes or summarise away plot lines; you may compress description and dialogue, but every plot beat must remain." : "";
-    const glossaryDirection = "Also return glossary: an array of {word, zh} covering B2-and-above content words that appear verbatim in article. Lowercase every word. Never repeat a target word, never invent a word that is not literally in article, dedupe, keep at most 60 entries, and leave out anything you are not sure about rather than guessing.";
+    const glossaryDirection = "Also return glossary: an array of {word, zh, ipa} covering B2-and-above content words that appear verbatim in article. Lowercase every word. Never repeat a target word, never invent a word that is not literally in article, dedupe, keep at most 60 entries, and leave out anything you are not sure about rather than guessing. For every targetWords item and every glossary entry also give ipa: British IPA without slashes, or an empty string if you are unsure.";
     const coverageDirection = words.length >= 3
       ? "Aim to embed at least 60% of the target words, and never fewer than 3 when 3 or more are available. Only leave a word out when it genuinely cannot fit without breaking the meaning."
       : "Aim to embed every target word. Only leave a word out when it genuinely cannot fit without breaking the meaning.";
@@ -483,6 +483,7 @@
   }
 
   // 生词表校验：缺失/非数组当空；word 必须 1-24 位字母开头，zh 非空且不超过 20 个字符；不合规条目直接丢弃。
+  // ipa 可选，最多 40 个字符；缺失时不补占位，气泡里就不显示音标行。
   function parseGlossary(raw) {
     if (!Array.isArray(raw)) return [];
     const out = [];
@@ -491,13 +492,14 @@
       if (!item || typeof item !== "object") return;
       const word = String(item.word == null ? "" : item.word).trim();
       const zh = String(item.zh == null ? "" : item.zh).trim();
+      const ipa = String(item.ipa == null ? "" : item.ipa).trim().slice(0, 40);
       if (!/^[A-Za-z][A-Za-z’\\-]{0,23}$/.test(word)) return;
       if (!zh || Array.from(zh).length > 20) return;
       const key = word.toLowerCase();
       if (seen.has(key)) return;
       seen.add(key);
       if (out.length >= 60) return;
-      out.push({ word: key, zh });
+      out.push(ipa ? { word: key, zh, ipa } : { word: key, zh });
     });
     return out;
   }

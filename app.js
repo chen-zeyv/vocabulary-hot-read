@@ -1669,8 +1669,8 @@
     };
     const outputSchema = {
       article: "English article as plain text, 3-8 paragraphs",
-      targetWords: [{ word: "exact target word", glossZh: "简短中文词义", used: true }],
-      glossary: [{ word: "subsidy", zh: "补贴" }],
+      targetWords: [{ word: "exact target word", glossZh: "简短中文词义", ipa: "英式音标，不含斜杠" }],
+      glossary: [{ word: "subsidy", zh: "补贴", ipa: "ˈsʌbsədi" }],
       uncoveredWords: ["words omitted because natural usage was not possible"],
       questions: sequence.map((type, index) => ({
         type,
@@ -1706,7 +1706,7 @@
         ...state.questionTypes.map((type) => type + ": " + (typeGuide[type] || "Use facts from the article.")),
         "Do not use any question type outside the listed sequence.",
         translate ? "Include a faithful Chinese full translation in translation." : "Set translation to null.",
-        "Also return glossary: an array of {word, zh} covering B2-and-above content words that appear verbatim in the final article. Lowercase every word, never repeat a target word, never invent a form that is not literally in the article, dedupe, keep at most 60 entries, and omit anything you are unsure about instead of guessing.",
+        "Also return glossary: an array of {word, zh, ipa} covering B2-and-above content words that appear verbatim in the final article. Lowercase every word, never repeat a target word, never invent a form that is not literally in the article, dedupe, keep at most 60 entries, and omit anything you are unsure about instead of guessing. For every targetWords item and every glossary entry also give ipa: British IPA without slashes, or an empty string if you are unsure.",
         "Preserve the given source URL, source name, and dates in the UI metadata; do not invent alternate citations.",
       ].filter(Boolean).join("\n"),
     };
@@ -2700,10 +2700,11 @@
   }
   function wireArticleInteractions(targetWords) {
     const glossary = Array.isArray(state.generated && state.generated.glossary) ? state.generated.glossary : [];
-    const glossaryMap = new Map(glossary.map((item) => [String(item.word || "").toLowerCase(), item.zh]));
+    const glossaryMap = new Map(glossary.map((item) => [String(item.word || "").toLowerCase(), item]));
     let sharedPopover = null;
     let sharedWord = "";
     let sharedSentence = "";
+    let sharedPhonetic = "";
     let glossEntryPushed = false;
     function ensureSharedPopover() {
       if (sharedPopover) return;
@@ -2757,6 +2758,12 @@
       speakButton.addEventListener("click", () => speakWord(sharedWord));
       head.append(wordLabel, speakButton);
       sharedPopover.append(head);
+      if (sharedPhonetic) {
+        const phonetic = document.createElement("span");
+        phonetic.className = "gloss-phonetic";
+        phonetic.textContent = sharedPhonetic;
+        sharedPopover.append(phonetic);
+      }
       const message = document.createElement("span");
       message.className = "gloss-meaning";
       const key = sharedWord.toLowerCase();
@@ -2864,7 +2871,17 @@
       detail.className = "gloss-popover";
       detail.setAttribute("role", "status");
       detail.hidden = true;
-      detail.textContent = isValidTargetWord(target) ? target.glossZh : "疑似非单词 · 已忽略";
+      const meaningText = isValidTargetWord(target) ? target.glossZh : "疑似非单词 · 已忽略";
+      if (target.ipa) {
+        const phonetic = document.createElement("span");
+        phonetic.className = "gloss-phonetic";
+        phonetic.textContent = String(target.ipa);
+        detail.append(phonetic);
+      }
+      const meaning = document.createElement("span");
+      meaning.className = "gloss-meaning";
+      meaning.textContent = meaningText;
+      detail.append(meaning);
       const inlineSpeak = document.createElement("button");
       inlineSpeak.type = "button";
       inlineSpeak.className = "gloss-speak gloss-speak-inline";
@@ -2879,7 +2896,7 @@
       mark.setAttribute("role", "button");
       mark.setAttribute("aria-expanded", "false");
       mark.setAttribute("aria-controls", id);
-      mark.setAttribute("aria-label", `${target.word}：${detail.textContent}，点击查看释义`);
+      mark.setAttribute("aria-label", `${target.word}：${meaningText}，点击查看释义`);
       mark.insertAdjacentElement("afterend", detail);
       const toggleGloss = () => {
         const open = mark.getAttribute("aria-expanded") !== "true";
@@ -2910,8 +2927,10 @@
         const surface = wordElement.textContent.trim();
         if (!isLookupCandidate(surface)) return;
         const key = surface.toLowerCase();
-        const zh = glossaryMap.get(key) || "";
+        const entry = glossaryMap.get(key);
+        const zh = entry ? entry.zh : "";
         sharedWord = surface;
+        sharedPhonetic = entry && entry.ipa ? String(entry.ipa) : "";
         sharedSentence = sentenceAround(wordElement);
         ensureSharedPopover();
         renderSharedPopover(zh);
@@ -3179,7 +3198,7 @@
       : "";
     const quizPanel = lesson.uncoveredWords.length && !state.incompleteAccepted
       ? ""
-      : `<section class="result-panel">${resultCard}<p class="result-kicker">浏览器本地判分</p><h2>检查理解</h2><form id="quiz-form"><div class="quiz-list">${questions}</div><div class="button-row"><span id="quiz-progress" class="inline-state" role="status"></span><span id="quiz-score" class="inline-state" role="status"></span></div></form></section>`;
+      : `<section class="result-panel">${resultCard}<p class="result-kicker">浏览器本地判分</p><h2>检查理解</h2><form id="quiz-form"><div class="quiz-list">${questions}</div><div class="button-row"><span id="quiz-progress" class="inline-state" role="status"></span></div></form></section>`;
     const incompletePanel = lesson.uncoveredWords.length && !state.incompleteAccepted
       ? `<section class="result-panel incomplete-actions"><p class="result-kicker">文章尚未完成</p><h2>目标词没有全部出现</h2><p>练习暂不可用。你可以确认后请求一次修订，或接受当前文章并继续。</p><div class="button-row"><button class="button primary" id="revise-button" type="button" ${state.revisionUsed ? "disabled" : ""}>确认修订一次</button><button class="button secondary" id="accept-incomplete" type="button">接受当前文章</button></div><p class="helper">${state.revisionUsed ? "已使用一次修订机会；不会再次发送请求。" : "修订会额外发送一次请求，可能产生费用。只有确认后才会发送。"}</p></section>`
       : "";
@@ -3294,11 +3313,6 @@
       const correctRadio = document.querySelector(`input[name="q${index}"][value="${question.correctOption}"]`);
       correctRadio?.closest(".quiz-option")?.classList.add("correct-answer");
     });
-    const scoreElement = $("#quiz-score");
-    if (scoreElement) {
-      scoreElement.textContent = `本地得分：${score}/${questions.length}`;
-      scoreElement.className = `inline-state ${score === questions.length ? "success" : score === 0 ? "error" : ""}`.trim();
-    }
     applyQuizPenalty(score, questions.length);
   }
 

@@ -462,8 +462,10 @@ body.settings-open { overflow:hidden; }
 /* 「清空本页」是危险动作：放在设置·学习记录，先点开二次确认才执行。 */
 .settings-danger { margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
 .danger-text { color:#B4472F; }
-.quiz-action-buttons { display:flex; gap:12px; flex-wrap:wrap; width:100%; }
-.quiz-action-buttons .button { min-width:0; flex:1 1 140px; }
+.quiz-action-buttons { display:flex; gap:12px; flex-wrap:nowrap; width:100%; }
+.quiz-action-buttons .button { min-width:0; }
+.quiz-action-buttons #back-to-reading { flex:1 1 0; width:auto; min-width:0; }
+.quiz-action-buttons #retry-quiz { flex:0 0 132px; width:132px; }
 @media (max-width:900px) {
   .settings-view { padding:16px; }
   .settings-panel { width:min(640px, calc(100vw - 32px)); }
@@ -482,6 +484,7 @@ body.settings-open { overflow:hidden; }
 .target-word[data-viewed="1"] { border-bottom-style:dashed; }
 .gloss-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 0 4px; }
 .gloss-word { color:#1E2A33; font-size:18px; line-height:24px; }
+.gloss-phonetic { display:block; margin:0 0 2px; color:#8C8474; font-size:12px; line-height:16px; }
 .gloss-speak { display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; min-height:44px; padding:0; border:0; border-radius:10px; background:#F1EADA; color:#195C92; cursor:pointer; }
 .gloss-speak:hover { background:#E9DFC8; }
 .gloss-speak:focus-visible { outline:2px solid #195C92; outline-offset:2px; }
@@ -501,7 +504,7 @@ body.settings-open { overflow:hidden; }
 .wordbook-delay { justify-content:center; min-width:44px; min-height:44px; }
 .wordbook-delay-label { margin-left:2px; }
 @media (max-width:360px) {
-  .wordbook-chips { display:grid; grid-template-columns:repeat(2, minmax(120px, 1fr)); gap:6px 8px; }
+  .wordbook-chips { display:grid; grid-template-columns:repeat(2, minmax(120px, 1fr)); gap:6px 8px; max-height:94px; overflow-y:auto; }
   .wordbook-due-item { position:relative; padding-right:52px; }
   .wordbook-due-sep { display:none; }
   .wordbook-delay { position:absolute; right:0; top:0; width:44px; height:44px; }
@@ -516,7 +519,7 @@ body.settings-open { overflow:hidden; }
 .quiz-score { margin:0; color:#1F6B57; font-size:34px; line-height:1; font-weight:700; }
 .quiz-score span { margin-left:2px; color:#5B7A6D; font-size:15px; font-weight:600; }
 .quiz-score-note { margin:6px 0 0; color:#6E6558; font-size:13px; }
-.quiz-review-pill { display:inline-flex; align-items:center; min-height:28px; margin-top:10px; padding:0 12px; border-radius:999px; background:#E4F2EC; color:#1F6B57; font-size:12.5px; font-weight:600; }
+.quiz-review-pill { display:inline-flex; align-items:center; min-height:28px; margin-top:10px; padding:0 12px; border-radius:99px; background:#E4F2EC; color:#1F6B57; font-size:11px; font-weight:600; }
 .quiz-review-pill:empty { display:none; }
 .shake { animation:vh-shake .4s ease; }
 @keyframes vh-shake {
